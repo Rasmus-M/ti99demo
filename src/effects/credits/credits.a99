@@ -1,0 +1,620 @@
+*********************************************************************
+*
+* Credits scroller demo
+*
+* For the TI-99/4A Home Computer
+*
+* Created by Rasmus Moustgaard in June 2016
+* rasmus.moustgaard@gmail.com
+*
+       COPY "../../common/HEADER.INC"
+       COPY "../../common/ROUTINES.INC"
+
+**
+* VDP Memory Map
+PTRNT0 EQU	>0000				* Pattern table base 0
+NAMET0 EQU	>0400				* Name table base 0
+COLRTB EQU	>0700				* Color table base
+PTRNT1 EQU	>0800				* Pattern table base 1
+NAMET1 EQU	>0C00				* Name table base 1
+PTRNT2 EQU	>1000				* Pattern table base 2
+SPRPTB EQU	>1000				* Sprite pattern table base (free from >1400)
+PTRNT3 EQU	>1800				* Pattern table base 3
+PTRNT4 EQU	>2000				* Pattern table base 4
+SPRAT0 EQU	>2400				* Sprite attribute table base 0
+SPRAT1 EQU	>2480				* Sprite attribute table base 1
+PTRNT5 EQU	>2800				* Pattern table base 5
+PTRNT6 EQU	>3000				* Pattern table base 6
+PTRNT7 EQU	>3800				* Pattern table base 7
+
+**
+* Scratch pad
+WRKSP  EQU  >8300				* Workspace
+STACK  EQU	>8340
+R0LB   EQU  WRKSP+1				* R0 low byte reqd for VDP routines
+R1LB   EQU  WRKSP+3
+R2LB   EQU  WRKSP+5
+R3LB   EQU  WRKSP+7
+
+*******************************************************************************
+*
+* Main program
+*
+       XORG FXMEM
+
+       DATA INIT
+       DATA FRAME
+
+*********************************************************************
+*
+* Init
+*
+INIT   LI   R10,STACK
+       MOV  R11,*R10+                  ; Push return address onto the stack
+	   BL	@GMODE
+	   BL	@INIPAT
+*      Screen on
+       LI   R0,>01E2
+       BL   @VWTR
+*	   Return
+       DECT R10					* Pop return address off the stack
+	   MOV  *R10,R11
+	   B	*R11
+*// INIT
+
+********************************************************************************
+*
+* Frame
+*
+FRAME  LI	R10,STACK
+       MOV  R11,*R10+                  ; Push return address onto the stack
+*	   Switch pattern table
+	   MOV	@TICK,R0
+	   ANDI	R0,>0007
+	   ORI	R0,>0400
+	   BL	@VWTR
+*	   Switch name table	   
+	   MOV	@TICK,R0
+	   ANDI	R0,>0008			* 8 or 0
+	   SRL	R0,2				* 2 or 0
+	   INC	R0					* 3 or 1
+	   ORI	R0,>0200
+	   BL	@VWTR
+*	   Switch sprite attribute table
+       MOV	@TICK,R0
+       ANDI R0,1
+       ORI  R0,>0548
+	   BL	@VWTR
+*	   Update name table
+	   BL	@UPDNT
+*      Update sprites
+       BL   @MOVSPR
+*	   Next text row?
+	   MOV	@TICK,R0
+	   INC	R0
+	   MOV	R0,@TICK
+	   ANDI	R0,>0007
+	   JNE	LOOP
+	   CLR	@NTROW				* Reset name table row
+	   INC	@ROWNO				* Next text row
+LOOP   CLR  R0
+	   MOV  @ROWNO,R1
+	   CI   R1,232
+	   JLT  RETURN
+	   SETO R0
+*	   Return
+RETURN DECT R10					* Pop return address off the stack
+	   MOV  *R10,R11
+	   B	*R11
+*// FRAME
+	 
+TICK   DATA	0
+NTROW  DATA	0					* Current name table row to be updated
+ROWNO  DATA	-24					* Row number displayed at the top of the screen
+*								* Note: two rows per text line    
+SPRPOS DATA 0
+*********************************************************************************
+*
+* Update 3 lines of the invisible name table buffer
+*
+UPDNT  MOV  R11,*R10+			* Push return address onto the stack
+	   LI	R15,VDPWD			* VDP write data
+*	   VDP write address
+	   MOV	@TICK,R0
+	   INV	R0
+	   ANDI	R0,>0008			* 8 or 0
+	   SLA	R0,8				* >800 or 0
+	   AI	R0,>400				* >C00 or >400
+	   MOV	@NTROW,R1			* Row to update
+	   SLA	R1,5				* Multiply by 32
+	   A	R1,R0				* Add to base
+	   BL	@VWAD				* Setup write address
+*	   Update rows
+	   LI	R3,3				* 3 rows to udpate
+	   MOV	@ROWNO,R4			* Get top row number
+	   A	@NTROW,R4			* Add name table offset
+*	   Update row	   
+UPDNT1 MOV	R4,R0				* Get current row number
+	   JLT	UPDNT4				* Skip if row number is negative
+	   SRA	R0,1				* Divide by 2 to get text line
+	   ANDI	R0,>007F			* Wrap at 128 lines
+	   SLA	R0,5				* Multiply row by 32 to get offset
+	   AI	R0,SCRTXT			* Add text base address
+	   LI	R2,32				* Byte/character counter
+	   MOV	R4,R1				* Get row
+	   ANDI	R1,>0001			* Check if odd
+	   JNE	UPDNT3
+*	   Even row
+UPDNT2 MOVB	*R0+,R1
+	   AI	R1,>E000			* -32
+	   MOV	R1,*R15
+	   DEC	R2
+	   JNE	UPDNT2
+	   JMP	UPDNT4
+*	   Odd row
+UPDNT3 MOVB	*R0+,R1
+	   AI	R1,>2000			* +32
+	   MOV	R1,*R15
+	   DEC	R2
+	   JNE	UPDNT3
+UPDNT4 INC	R4
+	   INC	@NTROW
+	   DEC	R3
+	   JNE	UPDNT1
+*	   Return
+	   DECT R10					* Pop return address off the stack
+	   MOV  *R10,R11
+	   B	*R11
+*// UPDNT
+
+*********************************************************************
+*
+* Move sprites
+*
+MOVSPR MOV  R11,*R10+                  ; Push return address onto the stack
+       MOV  @TICK,R0
+       INV  R0
+       ANDI R0,1
+       SLA  R0,7
+       AI   R0,SPRAT0
+       BL   @VWAD
+       LI   R0,VDPRD
+       LI   R3,>C000
+*      Left side
+       MOV  @SPRPOS,R1
+       ANDI R1,>00FF
+       SWPB R1
+       LI   R2,16
+MOVSP1 CI   R1,>D000
+       JNE  MOVSP2
+       MOVB R3,*R15
+       JMP  MOVSP3
+MOVSP2 MOVB R1,*R15
+       NOP                             ; Confirmed to be required on hardware
+MOVSP3 MOVB *R0,R4
+       MOVB *R0,R4
+       MOVB *R0,R4
+       AI   R1,>1000
+       DEC  R2
+       JNE MOVSP1
+*      Right side
+       MOV  @SPRPOS,R1
+*       NEG  R1
+       ANDI R1,>00FF
+       SWPB R1
+*       ANDI R1,>FF00
+       LI   R2,16
+MOVSP4 CI   R1,>D000
+       JNE  MOVSP5
+       MOVB R3,*R15
+       JMP  MOVSP6
+MOVSP5 MOVB R1,*R15
+       NOP                             ; Confirmed to be required on hardware
+MOVSP6 MOVB *R0,R4
+       MOVB *R0,R4
+       MOVB *R0,R4
+       AI   R1,>1000
+       DEC  R2
+       JNE MOVSP4
+       INC  @SPRPOS
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// MOVSPR
+
+*********************************************************************************
+*
+* Initialize patterns
+*
+INIPAT MOV  R11,*R10+			* Push return address onto the stack
+	   LI	R15,VDPWD			* VDP write data
+**
+*	   Part 1: scrolling from pattern 0 to pattern x [32-95]	   
+	   LI	R0,PTRNT0			* VDP destination address
+	   CLR	R3					* Frame counter f
+	   LI	R4,8				* Inverted frame counter (8 - f)
+INIPA1 BL	@VWAD				* Set VDP write address
+	   LI	R5,64				* Pattern counter
+	   LI	R6,PAT32			* Pattern address
+*	   8 - f bytes from pattern 0
+INIPA2 MOV	R4,R2				* 8 - f
+	   JEQ	INIPA4				* Skip if zero
+	   LI	R1,PAT0				* Pattern 0 source address
+	   A	R3,R1				* Add byte offset
+INIPA3 MOVB	*R1+,*R15			* Write to VDP
+	   DEC	R2
+	   JNE	INIPA3
+*	   f bytes from pattern x	   
+INIPA4 MOV	R3,R2				* f
+	   JEQ	INIPA6				* Skip if zero
+	   MOV	R6,R1				* Pattern x source address
+INIPA5 MOVB	*R1+,*R15			* Write to VDP
+	   DEC	R2
+	   JNE	INIPA5
+INIPA6 AI	R6,8				* Next pattern address
+	   DEC	R5
+       JNE	INIPA2
+	   AI	R0,>0800			* Next pattern table
+	   INC	R3					* Next frame
+	   BL   @PLAYSNG
+	   DEC	R4
+	   JNE	INIPA1
+**
+*	   Part 2: scrolling from pattern x [32-95] to pattern 0	   
+	   LI	R0,PTRNT0+>0200		* VDP destination address
+	   CLR	R3					* Frame counter f
+	   LI	R4,8				* Inverted frame counter (8 - f)
+INIPA7 BL	@VWAD				* Set VDP write address
+	   LI	R5,64				* Pattern counter
+	   LI	R6,PAT32			* Pattern address
+*	   8 - f bytes from pattern x
+INIPA8 MOV	R4,R2				* 8 - f
+	   JEQ	INIPAA				* Skip if zero
+	   MOV	R6,R1				* Pattern x source address
+	   A	R3,R1				* Add byte offset
+INIPA9 MOVB	*R1+,*R15			* Write to VDP
+	   DEC	R2
+	   JNE	INIPA9
+*	   f bytes from pattern 0	   
+INIPAA MOV	R3,R2				* f
+	   JEQ	INIPAC				* Skip if zero
+	   LI	R1,PAT0				* Pattern 0 source address
+INIPAB MOVB	*R1+,*R15			* Write to VDP
+	   DEC	R2
+	   JNE	INIPAB
+INIPAC AI	R6,8				* Next pattern address
+	   DEC	R5
+       JNE	INIPA8
+	   AI	R0,>0800			* Next pattern table
+	   INC	R3					* Next frame
+	   BL   @PLAYSNG
+	   DEC	R4
+	   JNE	INIPA7
+*	   Return
+	   DECT R10					* Pop return address off the stack
+	   MOV  *R10,R11
+	   B	*R11
+*// INIPAT
+
+*********************************************************************************
+*
+* Set graphics mode
+*
+GMODE  MOV  R11,*R10+			* Push return address onto the stack
+	   CLR	R0
+	   LI	R1,VREGS
+	   LI	R2,8
+GMODE1 MOVB	*R1+,@R0LB
+	   BL   @VWTR				* Set register
+	   AI	R0,>0100
+	   DEC	R2
+	   JNE	GMODE1
+*      Clear name tables
+       LI   R0,NAMET0
+       CLR  R1
+       LI   R2,>300
+       BL   @VDPWR
+       LI   R0,NAMET1
+       CLR  R1
+       LI   R2,>300
+       BL   @VDPWR
+*	   Init color table
+	   LI	R0,COLRTB
+	   LI	R1,COLORS
+	   LI	R2,16
+	   BL	@VDPCP
+*      Sprite patterns
+       LI   R0,SPRPTB+>400
+       LI   R1,SPR0
+       LI   R2,24*32
+       BL   @VDPCP
+*      Sprite attributes
+       LI   R0,SPRAT0
+       LI   R1,SAT
+       LI   R2,32*4
+       BL   @VDPCP
+       LI   R1,>D000
+       MOVB R1,@VDPWD
+       LI   R0,SPRAT1
+       LI   R1,SAT
+       LI   R2,32*4
+       BL   @VDPCP
+       LI   R1,>D000
+       MOVB R1,@VDPWD
+*	   Return
+	   DECT R10					* Pop return address off the stack
+	   MOV  *R10,R11
+	   B	*R11
+VREGS  BYTE >00					* Graphics I mode
+	   BYTE >A2					* 16K, display on, interrupt enabled
+	   BYTE >01					* NAMET0 = >0400
+	   BYTE >1C					* COLRTB = >0700
+	   BYTE >04					* PTRNT0 = >0000
+	   BYTE >48					* SPRAT0 = >2400
+	   BYTE >02					* SPRPTB = >1000
+	   BYTE >00					* Backdrop color
+COLORS BYTE >40,>50,>40,>50,>40,>50,>40,>50
+	   BYTE >40,>50,>40,>50,>40,>50,>40,>50
+	   
+********************************************************************************
+*
+* VDP Set Write Address
+*
+* R0: Address to set VDP address counter to
+*
+VWAD   MOVB @R0LB,@VDPWA			* Send low byte of VDP RAM write address
+	   ORI  R0,>4000				* Set the two MSbits to 01 for write
+	   MOVB R0,@VDPWA				* Send high byte of VDP RAM write address
+	   ANDI R0,>3FFF				* Restore R0 top two MSbits
+	   B	*R11
+*// VWAD
+
+********************************************************************************
+*
+* VDP Single Byte Write
+*
+* R0: Write address in VDP RAM
+* R1: MSB of R1 sent to VDP RAM
+*
+* R0 is modified, but can be restored with: ANDI R0,>3FFF
+*
+VSBW   MOVB @R0LB,@VDPWA		* Send low byte of VDP RAM write address
+	   ORI  R0,>4000			* Set read/write bits 14 and 15 to write (01)
+	   MOVB R0,@VDPWA			* Send high byte of VDP RAM write address
+	   MOVB R1,@VDPWD			* Write byte to VDP RAM
+	   B	*R11
+*// VSBW
+
+********************************************************************************
+*
+* VDP Write To Register
+*
+* R0 MSB: VDP register to write to
+* R0 LSB: Value to write
+*
+VWTR   MOVB @R0LB,@VDPWA		* Send low byte (value) to write to VDP register
+	   ORI  R0,>8000			* Set up a VDP register write operation (10)
+	   MOVB R0,@VDPWA			* Send high byte (address) of VDP register
+	   B	*R11
+*// VWTR	   
+
+*********************************************************************
+*
+* Fast CPU to VDP copy, replaces VMBW
+*
+* R0: Destination address
+* R1: Source address
+* R2: Number of bytes to copy
+*
+VDPCP  MOV  R11,*R10+                  ; Push return address onto the stack
+       SWPB R0
+       MOVB R0,@VDPWA                  ; Send low byte of VDP RAM write address
+       SWPB R0
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       LI   R0,VDPWD
+       MOV  R2,R3
+       SRL  R3,3                       ; Number of groups of 8
+       JEQ  VDPC2
+VDPC1  MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       COC  @VDPC7,R3
+       JNE  VDPC4
+       BL   @PLAYSNG
+VDPC4  DEC  R3
+       JNE  VDPC1
+       ANDI R2,>0007                   ; Isolate number of remaining bytes
+       JEQ  VDPC3
+VDPC2  MOVB *R1+,*R0
+       DEC  R2
+       JNE  VDPC2
+*      Return
+VDPC3  DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+VDPC7  DATA >0007
+*// VDPCP
+
+*********************************************************************
+*
+* Fast CPU to VDP write, replaces VSMW
+*
+* R0: Destination address
+* R1: Byte to write in MSB
+* R2: Number of bytes to copy
+*
+VDPWR  MOV  R11,*R10+                  ; Push return address onto the stack
+       SWPB R0
+       MOVB R0,@VDPWA                  ; Send low byte of VDP RAM write address
+       SWPB R0
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       LI   R0,VDPWD
+       MOV  R2,R3
+       SRL  R3,3                       ; Number of groups of 8
+       JEQ  VDPW2
+VDPW1  MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       COC  @VDPW7,R3
+       JNE  VDPW4
+       BL   @PLAYSNG
+VDPW4  DEC  R3
+       JNE  VDPW1
+       ANDI R2,>0007                   ; Isolate number of remaining bytes
+       JEQ  VDPW3
+VDPW2  MOVB R1,*R0
+       DEC  R2
+       JNE  VDPW2
+*      Return
+VDPW3  DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+VDPW7  DATA >0007
+*// VDPWR
+
+********************************************************************************
+
+SCRTXT TEXT '                                '
+       TEXT '             DESIRE             '
+	   TEXT '            PRESENTED           '
+	   TEXT '                                '
+	   TEXT '   * DON''T MESS WITH TEXAS *    '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '            TI-99/4A            '
+	   TEXT '            MEGADEMO            '
+	   TEXT '              2016              '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '           CODING BY:           '
+	   TEXT '                                '
+	   TEXT '          ORBITALDECAY          '
+	   TEXT '             ASMUSR             '
+	   TEXT '             TURSI              '
+	   TEXT '              ...               '
+	   TEXT '                                '
+	   TEXT '          GRAPHICS BY:          '
+	   TEXT '              JMPH              '
+	   TEXT '            BOKANOID            '
+	   TEXT '         SOMETIMES99ER          '
+	   TEXT '              ...               '
+	   TEXT '                                '
+	   TEXT '            MUSIC BY:           '
+	   TEXT '              JMPH              '
+	   TEXT '              ...               '
+	   TEXT '                                '
+	   TEXT '           ARRANGED BY:         '
+	   TEXT '             RAMONB5            '
+	   TEXT '                                '
+	   TEXT '          AND SO ON...          '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '     TTTTTTTTTTTTTTTTTTTTTT     '
+	   TEXT '     TTTTTTTTTTTTTTTTTTTTTT     '
+	   TEXT '     TTTTTTTTTTTTTTTTTTTTTT     '
+	   TEXT '             TTTTTT             '
+	   TEXT '             TTTTTT             '
+	   TEXT '             TTTTTT             '
+	   TEXT '             TTTTTT             '
+	   TEXT '             TTTTTT             '
+	   TEXT '             TTTTTT             '
+	   TEXT '             TTTTTT             '
+	   TEXT '             TTTTTT             '
+	   TEXT '                                '
+	   TEXT '     HHHHHH          HHHHHH     '
+	   TEXT '     HHHHHH          HHHHHH     '
+	   TEXT '     HHHHHH          HHHHHH     '
+	   TEXT '     HHHHHH          HHHHHH     '
+	   TEXT '     HHHHHHHHHHHHHHHHHHHHHH     '
+	   TEXT '     HHHHHHHHHHHHHHHHHHHHHH     '
+	   TEXT '     HHHHHHHHHHHHHHHHHHHHHH     '
+	   TEXT '     HHHHHH          HHHHHH     '
+	   TEXT '     HHHHHH          HHHHHH     '
+	   TEXT '     HHHHHH          HHHHHH     '
+	   TEXT '     HHHHHH          HHHHHH     '
+	   TEXT '                                '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '     EEEEEE                     '
+	   TEXT '     EEEEEEEEEEEE               '
+	   TEXT '     EEEEEEEEEEEE               '
+	   TEXT '     EEEEEEEEEEEE               '
+	   TEXT '     EEEEEE                     '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '     EEEEEE                     '
+	   TEXT '     EEEEEEEEEEEE               '
+	   TEXT '     EEEEEEEEEEEE               '
+	   TEXT '     EEEEEEEEEEEE               '
+	   TEXT '     EEEEEE                     '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '     EEEEEEEEEEEEEEEEEEEEEE     '
+	   TEXT '                                '
+	   TEXT '     NNNNNNNN        NNNNNN     '
+	   TEXT '     NNNNNNNNN       NNNNNN     '
+	   TEXT '     NNNNNNNNNN      NNNNNN     '
+	   TEXT '     NNNNNNNNNNN     NNNNNN     '
+	   TEXT '     NNNNNNNNNNNN    NNNNNN     '
+	   TEXT '     NNNNNN NNNNNN   NNNNNN     '
+	   TEXT '     NNNNNN  NNNNNN  NNNNNN     '
+	   TEXT '     NNNNNN   NNNNNN NNNNNN     '
+	   TEXT '     NNNNNN    NNNNNNNNNNNN     '
+	   TEXT '     NNNNNN     NNNNNNNNNNN     '
+	   TEXT '     NNNNNN      NNNNNNNNNN     '
+	   TEXT '                                '
+	   TEXT '     DDDDDDDDDDDDDDDD           '
+	   TEXT '     DDDDDDDDDDDDDDDDDDD        '
+	   TEXT '     DDDDDDDDDDDDDDDDDDDDD      '
+	   TEXT '     DDDDDD          DDDDDD     '
+	   TEXT '     DDDDDD          DDDDDD     '
+	   TEXT '     DDDDDD          DDDDDD     '
+	   TEXT '     DDDDDD          DDDDDD     '
+	   TEXT '     DDDDDD          DDDDDD     '
+	   TEXT '     DDDDDDDDDDDDDDDDDDDDD      '
+	   TEXT '     DDDDDDDDDDDDDDDDDDD        '
+	   TEXT '     DDDDDDDDDDDDDDD            '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   
+PAT0   DATA >0000,>0000,>0000,>0000    ;
+       COPY "font.a99"
+       COPY "sprites.a99"

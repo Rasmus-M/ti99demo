@@ -1,0 +1,12 @@
+*********************************************************************
+* Filename: lenap.a99
+* Bank:     1
+* Date:     05/01/2016
+* Author:   orbitaldecay
+* 
+* Contains pattern table for Don't mess with Texas
+*********************************************************************
+
+       COPY "../../common/HEADER.INC"
+       BCOPY "../../data/DONTMESS.TIAP"
+       END

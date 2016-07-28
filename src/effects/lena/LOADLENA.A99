@@ -1,0 +1,88 @@
+*********************************************************************
+* Filename: loadlena.a99
+* Bank:     4
+* Date:     05/04/2016
+* Author:   orbitaldecay
+* 
+* A simple example of a demo effect.
+*********************************************************************
+
+       COPY "../../common/HEADER.INC"
+       COPY "../../common/ROUTINES.INC"
+       
+       XORG FXMEM
+
+*********************************************************************
+* Effect header
+*
+* The first two words of an effect file must be a pointer to an initialization
+* routine and a pointer to a frame rendering routine, respectively. The
+* initialization routine will be called once when the effect is loaded and the
+* frame rendering routine will be called at 60hz.
+*********************************************************************
+
+       DATA INIT
+       DATA FRAME
+       
+*********************************************************************
+* Initialization routine
+*
+* This simple example just draws a picture on the screen. Notice if
+* you're planning on using the default workspace (>8300) you must be
+* restore ALL original values.
+*********************************************************************
+INIT
+* Save original register values (or change workspaces from >8300)
+       MOV  R1,@SAVR1
+       MOV  R2,@SAVR2
+       MOV  R11,@SAVR11
+* Copy bitmap to screen
+       LI   R1,1            ; Bank / file index that contains pattern table
+       LI   R2,2            ; Bank / file index that contains color table
+       BL   @BITMAP         ; Draw image on screen
+* Restore original register values (or change workspace back to >8300)
+       MOV  @SAVR1,R1
+       MOV  @SAVR2,R2
+       MOV  @SAVR11,R11
+       RT
+
+*********************************************************************
+* Frame rendering routine
+*
+* This example does nothing except bail after 600 frames. Notice
+* when the control code calls this routine it populates the
+* following registers in workspace >8300 with the following values:
+*
+* R2 <= The current frame count for this effect
+* R3 <= The number of elapsed ticks since the begining of the effect (1/60 s)
+*
+* These values may differ for effects that don't run at 60 hz.
+* This routine must set R0 in workspace >8300 to zero if it wishes
+* for the render loop to continue, or set R0 in workspace >8300 to a
+* non-zero value to tell the control code to move to the next effect.
+* R0 is the only register in >8300 that this code is allowed to
+* modify. All other registers must be restored before returning.
+*
+* You have roughly 40,000 cycles to use in this function. Use them
+* wisely...
+*
+* If you want to sync your effect with music, check out the values
+* in @SONGWP+22, @SONGWP+24, @SONGWP+26, and @SONGWP+28.
+*
+*********************************************************************
+FRAME
+* Bail after 600 ticks (10 seconds)
+       CI   R3, 600
+       JGT  QUIT
+       CLR  R0
+       JMP  RETURN
+QUIT
+       SETO R0
+RETURN
+       RT
+       
+SAVR1  DATA >0000
+SAVR2  DATA >0000
+SAVR11 DATA >0000
+       
+       END

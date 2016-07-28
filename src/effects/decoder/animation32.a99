@@ -1,0 +1,2 @@
+       COPY "../../common/HEADER.INC"
+       BCOPY "ani32.bin"

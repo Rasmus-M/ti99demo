@@ -1,0 +1,702 @@
+*********************************************************************
+*
+* Checkerboard zoomer
+* For the TI-99/4A home computer
+*
+* May 2016
+*
+* Rasmus Moustgaard <rasmus.moustgaard@gmail.com>
+*
+*********************************************************************
+
+       COPY "../../common/HEADER.INC"
+       COPY "../../common/ROUTINES.INC"
+
+**
+* VDP memory map
+NAMET1 EQU  >0000                      ; Name table base 1
+COLRTB EQU  >0300                      ; Color table base
+SPRATB EQU  >0380                      ; Sprite attribute table base
+NAMET2 EQU  >0400                      ; Name table base 2
+PTRNTB EQU  >0800                      ; Pattern table base
+SPRPTB EQU  >1000                      ; Sprite pattern table base
+
+**
+* Scratch pad
+WRKSP  EQU  >8300                      ; Workspace
+R0LB   EQU  WRKSP+1                    ; R0 low byte required for VDP routines
+R1LB   EQU  WRKSP+3
+R2LB   EQU  WRKSP+5
+R3LB   EQU  WRKSP+7
+R4LB   EQU  WRKSP+9
+R5LB   EQU  WRKSP+11
+R6LB   EQU  WRKSP+13
+R7LB   EQU  WRKSP+15
+PLYRWS EQU  >8320
+STACK  EQU  >8340                      ; Subroutine stack
+EIGHT  EQU  STACK+16                   ; Constant 8
+X0     EQU  EIGHT+2                    ; Origin X
+Y0     EQU  X0+2                       ; Origin Y
+XSIZE  EQU  Y0+2                       ; Checker width
+YSIZE  EQU  XSIZE+2                    ; Checked height
+X1     EQU  YSIZE+2
+Y1     EQU  X1+2
+XCLR1  EQU  Y1+2
+YCLR1  EQU  XCLR1+2
+VDPADR EQU  YCLR1+2
+TICK   EQU  VDPADR+2                   ; Frame counter
+TIME   EQU  TICK+2                     ; For outro
+STADDR EQU  TIME+2                     ; For outro
+SNDBIT EQU  STADDR+2
+FRAMEL EQU  SNDBIT+2                   ; Frame loop code
+
+********************************************************************************
+*
+* Main program
+*
+       XORG FXMEM
+
+       DATA TOPINI
+       DATA TOPFRM
+
+*********************************************************************************
+*
+* Intitialize
+*
+TOPINI LI   R10,STACK
+       MOV  R11,*R10+                  ; Push return address onto the stack
+       LI   R0,8
+       MOV  R0,@EIGHT
+       BL   @GMODE
+*      Copy frame loop to scratch pad
+       LI   R0,FRAMEL
+       LI   R1,FRAME0
+       LI   R2,FRAMEE-FRAME0
+COPY   MOV  *R1+,*R0+
+       DEC  R2
+       JNE  COPY
+*      Logo
+       LI   R0,NAMET1
+       BL   @LOGO
+       LI   R0,NAMET1+28
+       BL   @LOGO
+       LI   R0,NAMET2
+       BL   @LOGO
+       LI   R0,NAMET2+28
+       BL   @LOGO
+*      Init
+       CLR  @X0
+       CLR  @Y0
+       LI   R0,24
+       MOV  R0,@XSIZE
+       LI   R0,24
+       MOV  R0,@YSIZE
+       CLR  @TICK
+       LI   R0,7
+       MOV  R0,@SNDBIT
+*      Screen on
+       LI   R0,>01E2
+       BL   @VWTR
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// TOPINI
+
+*********************************************************************************
+*
+* Frame
+*
+TOPFRM LI   R10,STACK
+       MOV  R11,*R10+                  ; Push return address onto the stack
+*      Set name table
+LOOP1  MOV  @TICK,R0
+       ANDI R0,1
+       ORI  R0,>0200
+       BL   @VWTR
+*      Frame or outro?
+       MOV  @TICK,R1
+       CI   R1,800
+       JHE  TOPFR1
+*      Update parameters
+*      XSIZE and YSIZE are sine curves with slightly different phases
+       MOV  @TICK,R1
+       BL   @SIN
+       SRA  R1,2
+       AI   R1,12+64
+       MOV  R1,@XSIZE
+       MOV  @TICK,R1
+       AI   R1,16
+       BL   @SIN
+       SRA  R1,2
+       AI   R1,12+64
+       MOV  R1,@YSIZE
+*      Move origin X0,Y0 in a circle
+       MOV  @TICK,R1
+       BL   @SIN
+       SRA  R1,3
+       AI   R1,32
+       MOV  R1,@X0
+       MOV  @TICK,R1
+       BL   @COS
+       SRA  R1,3
+       AI   R1,32
+       MOV  R1,@Y0
+*      Adjust origin for the size of the checkers
+       MOV  @XSIZE,R1
+       AI   R1,-8
+       SLA  R1,4
+       A    R1,@X0
+       MOV  @YSIZE,R1
+       AI   R1,-8
+       LI   R0,12
+       MPY  R0,R1
+       A    R2,@Y0
+*      Draw frame to double buffer
+       BL   @FRAME
+       JMP  TOPFR2
+*      Outro
+TOPFR1 JH   TOPFR3
+       BL   @OUTINI
+       JMP  TOPFR2
+TOPFR3 BL   @OUTRO
+*      Update variables
+TOPFR2 INC  @TICK
+*      Check for finish
+       CLR  R0
+       MOV  @TICK,R1
+       CI   R1,856
+       JL   RETURN
+       SETO R0
+*      Return
+RETURN DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+
+*********************************************************************
+*
+* Draw frame to VDP
+*
+FRAME  MOV  R11,*R10+                  ; Push return address onto the stack
+*      Set VDP address
+       LI   R0,NAMET2
+       MOV  @TICK,R1
+       ANDI R1,1
+       SLA  R1,10
+       SZC  R1,R0
+       AI   R0,4
+       BL   @VWAD
+       MOV  R0,@VDPADR
+*      Init X1 and XCLR1
+       CLR  @XCLR1                     ; xColor1 = 0 (white)
+       CLR  R0                         ; Setup division
+       MOV  @X0,R1
+       MOV  @XSIZE,R2
+       SLA  R2,1                       ; xSize * 2
+       DIV  R2,R0                      ; x1 = x0 % (xSize * 2), remainder x1 in R1
+       C    R1,@XSIZE                  ; x1 >= xSize ?
+       JLT  FRAME1                     ; No, move on
+       S    @XSIZE,R1                  ; x1 -= xSize
+       MOV  @EIGHT,@XCLR1              ; xColor1 = 8 (black)
+FRAME1 MOV  R1,@X1
+       MOV  @XSIZE,R0                  ; xSize
+       AI   R0,-8                      ; xSize - 8
+       MOV  R0,R8                      ; xSize8 = xSize - 8
+*      Init Y1 and YCLR1
+       CLR  @YCLR1                     ; yColor1 = 0 (white)
+       CLR  R0                         ; Setup division
+       MOV  @Y0,R1
+       MOV  @YSIZE,R2
+       SLA  R2,1                       ; ySize * 2
+       DIV  R2,R0                      ; y1 = y0 % (ySize * 2), remainder y1 in R1
+       C    R1,@YSIZE                  ; y1 >= ySize ?
+       JLT  FRAME2                     ; No, move on
+       S    @YSIZE,R1                  ; y1 -= ySize
+       MOV  @EIGHT,@YCLR1              ; yColor1 = 8 (black)
+FRAME2 MOV  R1,@Y1
+       MOV  @YSIZE,R0                  ; ySize
+       AI   R0,-8                      ; ySize - 8
+       MOV  R0,R9                      ; ySize8 = ySize - 8
+*      Store variables in registers for performance
+       LI   R0,VDPWD                   ; Store VDP write address in reg for performance
+       MOV  @EIGHT,R13                 ; Constant 8
+       MOV  @XSIZE,R14                 ; Checker width
+       MOV  @YSIZE,R15                 ; Checker height
+*      Call loop routine in PAD
+       BL   @FRAMEL
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// FRAME
+
+*********************************************************************
+*
+* Frame core loop - copied to scratch pad as FRAMEL
+*
+* In 16-bit RAM: 129000 cycles
+*
+FRAME0 MOV  R11,*R10+                  ; Push return address onto the stack
+       MOV  @Y1,R5                     ; y = y1
+       MOV  @YCLR1,R7                  ; yColor = yColor1
+*      Outer loop
+       LI   R3,24                      ; Row counter
+FRAME3 MOV  @X1,R4                     ; x = x1
+       MOV  @XCLR1,R6                  ; xColor = xColor1
+       MOV  R5,R12                     ; y
+       S    R9,R12                     ; yOff = y - ySize8
+       JGT  FRAME4                     ; if yOff < 0
+       CLR  R12                        ; yOff = 0
+FRAME4 SLA  R12,4                      ; patBase = yOff << 4
+       SOC  R6,R12                     ; patBase |= xColor
+       XOR  R7,R12                     ; patBase ^= yColor
+*      Inner loop
+       LI   R2,24                      ; Column counter
+FRAME5 MOV  R4,R1                      ; x
+       S    R8,R1                      ; xOff = x - xSize8
+       JGT  FRAME6                     ; OK if >= 0
+       CLR  R1                         ; xOff = 0
+FRAME6 A    R12,R1                     ; xOff += patBase
+       MOVB @R1LB,*R0                  ; Send byte to VDP
+       AI   R4,8                       ; x += 8
+       C    R4,R14                     ; if x > xSize
+       JLT  FRAME7                     ; No, continue
+       S    R14,R4                     ; x -= xSize
+       XOR  R13,R12                    ; patBase ^= 8
+FRAME7 DEC  R2                         ; Column counter
+       JNE  FRAME5                     ; Column loop
+*      Inner loop end
+       AI   R5,8                       ; y += 8
+       C    R5,R15                     ; if y > ySize
+       JLT  FRAME8                     ; No, continue
+       S    R15,R5                     ; y -= ySize
+       XOR  R13,R7                     ; yColor ^= 8
+FRAME8 MOV  @VDPADR,R1
+       AI   R1,32
+       MOV  R1,@VDPADR
+       MOVB @R1LB,@VDPWA               ; Send low byte of VDP RAM write address
+       ORI  R1,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R1,@VDPWA                  ; Send high byte of VDP RAM write address
+*      Play music
+       CZC  @SNDBIT,R3
+       JNE  FRAME9
+       BL   @PLAYSNG
+*      Next row
+FRAME9 DEC  R3                         ; Row counter
+       JNE  FRAME3                     ; Row loop
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+FRAMEE
+*// FRAME0
+
+*********************************************************************
+*
+* Draw logo
+*
+* R0: VDP address
+*
+LOGO   MOV  R11,*R10+                  ; Push return address onto the stack
+       LI   R1,MD0
+       LI   R2,24
+       LI   R3,VDPWD
+LOGO1  BL   @VWAD
+       MOVB *R1+,*R3
+       MOVB *R1+,*R3
+       MOVB *R1+,*R3
+       MOVB *R1+,*R3
+       AI   R0,32
+       DEC  R2
+       JNE  LOGO1
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// LOGO
+
+*********************************************************************
+*
+* Outro init
+*
+OUTINI MOV  R11,*R10+                  ; Push return address onto the stack
+       CLR  @TIME
+       LI   R1,NTBUF
+       MOV  R1,@STADDR
+*      Read name table into CPU RAM buffer
+       LI   R0,NAMET1
+       LI   R1,NTBUF
+       LI   R2,>300
+       BL   @VDPRE
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// OUTINI
+
+*********************************************************************
+*
+* Outro
+*
+OUTRO  MOV  R11,*R10+                  ; Push return address onto the stack
+*      Set VDP address
+       LI   R0,NAMET2
+       MOV  @TICK,R1
+       ANDI R1,1
+       SLA  R1,10
+       SZC  R1,R0
+       BL   @VWAD
+*      Update name table
+       MOV  @TIME,R5
+       MOV  @STADDR,R6
+       LI   R7,>FF00                   ; Name of empty pattern
+       LI   R8,NTBUF
+*       LI   R9,NTBUF+>300
+       LI   R0,VDPWD
+       LI   R3,24
+OUTRO1 MOV  R6,R1
+*      First part of row
+       MOV  R5,R2                      ; Time
+       JEQ  OUTRO6
+       CI   R2,32
+       JLT  OUTRO2
+       LI   R2,32
+OUTRO2 C    R1,R8
+       JHE  OUTRO3
+*      Empty char
+       MOVB R7,*R0
+       JMP  OUTRO5
+*      Copy char
+OUTRO3 MOVB *R1,*R0
+OUTRO5 AI   R1,33
+       DEC  R2
+       JNE  OUTRO2
+*      Second part of row
+OUTRO6 LI   R2,32
+       S    R5,R2
+       JLT  OUTRO7
+       JEQ  OUTRO7
+OUTRO4 MOVB *R1+,*R0
+       DEC  R2
+       JNE  OUTRO4
+*      Play music
+OUTRO7 CZC  @SNDBIT,R3
+       JNE  OUTRO8
+       BL   @PLAYSNG
+*      Next row
+OUTRO8 AI   R6,32
+       DEC  R3
+       JNE  OUTRO1
+*      Increment time
+       INC  @TIME
+*      Move start address up one row
+       LI   R1,32
+       S    R1,@STADDR
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// OUTRO
+
+*********************************************************************
+*
+* Calculate sine
+*
+* R1: Angle in units of 1/256 of a circle
+*
+* On return R1 contains the sine value in FP 8.8 format
+*
+SIN    ANDI R1,>00FF                   ; Wrap
+       SLA  R1,1
+       MOV  @SINTBL(R1),R1
+       B    *R11
+*// SIN
+
+*********************************************************************
+*
+* Calculate cosine
+*
+* R1: Angle in units of 1/256 of a circle
+*
+* On return R1 contains the cosine value in FP 8.8 format
+*        
+COS    AI   R1,64                      ; cos(a) = sin(a + 90 degrees or 64 units)
+       ANDI R1,>00FF                   ; Wrap
+       SLA  R1,1
+       MOV  @SINTBL(R1),R1
+       B    *R11
+*// COS
+
+*********************************************************************
+*
+*      256 samples of sine wave in FP 8.8 format
+*
+SINTBL DATA >0000,>0006,>000D,>0013,>0019,>001F,>0026,>002C
+       DATA >0032,>0038,>003E,>0044,>004A,>0050,>0056,>005C
+       DATA >0062,>0068,>006D,>0073,>0079,>007E,>0084,>0089
+       DATA >008E,>0093,>0098,>009D,>00A2,>00A7,>00AC,>00B1
+       DATA >00B5,>00B9,>00BE,>00C2,>00C6,>00CA,>00CE,>00D1
+       DATA >00D5,>00D8,>00DC,>00DF,>00E2,>00E5,>00E7,>00EA
+       DATA >00ED,>00EF,>00F1,>00F3,>00F5,>00F7,>00F8,>00FA
+       DATA >00FB,>00FC,>00FD,>00FE,>00FF,>00FF,>0100,>0100
+       DATA >0100,>0100,>0100,>00FF,>00FF,>00FE,>00FD,>00FC
+       DATA >00FB,>00FA,>00F8,>00F7,>00F5,>00F3,>00F1,>00EF
+       DATA >00ED,>00EA,>00E7,>00E5,>00E2,>00DF,>00DC,>00D8
+       DATA >00D5,>00D1,>00CE,>00CA,>00C6,>00C2,>00BE,>00B9
+       DATA >00B5,>00B1,>00AC,>00A7,>00A2,>009D,>0098,>0093
+       DATA >008E,>0089,>0084,>007E,>0079,>0073,>006D,>0068
+       DATA >0062,>005C,>0056,>0050,>004A,>0044,>003E,>0038
+       DATA >0032,>002C,>0026,>001F,>0019,>0013,>000D,>0006
+       DATA >0000,>FFFA,>FFF3,>FFED,>FFE7,>FFE1,>FFDA,>FFD4
+       DATA >FFCE,>FFC8,>FFC2,>FFBC,>FFB6,>FFB0,>FFAA,>FFA4
+       DATA >FF9E,>FF98,>FF93,>FF8D,>FF87,>FF82,>FF7C,>FF77
+       DATA >FF72,>FF6D,>FF68,>FF63,>FF5E,>FF59,>FF54,>FF4F
+       DATA >FF4B,>FF47,>FF42,>FF3E,>FF3A,>FF36,>FF32,>FF2F
+       DATA >FF2B,>FF28,>FF24,>FF21,>FF1E,>FF1B,>FF19,>FF16
+       DATA >FF13,>FF11,>FF0F,>FF0D,>FF0B,>FF09,>FF08,>FF06
+       DATA >FF05,>FF04,>FF03,>FF02,>FF01,>FF01,>FF00,>FF00
+       DATA >FF00,>FF00,>FF00,>FF01,>FF01,>FF02,>FF03,>FF04
+       DATA >FF05,>FF06,>FF08,>FF09,>FF0B,>FF0D,>FF0F,>FF11
+       DATA >FF13,>FF16,>FF19,>FF1B,>FF1E,>FF21,>FF24,>FF28
+       DATA >FF2B,>FF2F,>FF32,>FF36,>FF3A,>FF3E,>FF42,>FF47
+       DATA >FF4B,>FF4F,>FF54,>FF59,>FF5E,>FF63,>FF68,>FF6D
+       DATA >FF72,>FF77,>FF7C,>FF82,>FF87,>FF8D,>FF93,>FF98
+       DATA >FF9E,>FFA4,>FFAA,>FFB0,>FFB6,>FFBC,>FFC2,>FFC8
+       DATA >FFCE,>FFD4,>FFDA,>FFE1,>FFE7,>FFED,>FFF3,>FFFA
+
+*********************************************************************************
+*
+* Set graphics mode
+*
+GMODE  MOV  R11,*R10+                  ; Push return address onto the stack
+       CLR  R0
+       LI   R1,VREGS
+       LI   R2,8
+GMODE1 MOVB *R1+,@R0LB
+       BL   @VWTR                      ; Set register
+       AI   R0,>0100
+       DEC  R2
+       JNE  GMODE1
+*      Disable sprites
+       LI   R0,SPRATB
+       LI   R1,>D000
+       BL   @VSBW
+*      Patterns
+       LI   R0,PTRNTB
+       LI   R1,PAT0
+       LI   R2,128*8
+       BL   @VDPCP
+       LI   R0,PTRNTB+>400
+       LI   R1,PAT128
+       LI   R2,104*8
+       BL   @VDPCP
+*      Colors
+       LI   R0,COLRTB
+       LI   R1,>4F00
+       LI   R2,16
+       BL   @VDPWR
+       LI   R0,COLRTB+16
+       LI   R1,CLRSET
+       LI   R2,16
+       BL   @VDPCP
+*      Clear name tables
+       LI   R0,NAMET1
+       LI   R1,>8000
+       LI   R2,768
+       BL   @VDPWR
+       LI   R0,NAMET2
+       LI   R1,>8000
+       LI   R2,768
+       BL   @VDPWR
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+VREGS  BYTE >00                        ; Graphics I mode
+       BYTE >A2                        ; 16K, display off, interrupt enabled
+       BYTE >00                        ; NAMETB = >0000
+       BYTE >0C                        ; COLRTB = >0300
+       BYTE >01                        ; PTRNTB = >0800
+       BYTE >07                        ; SPRATB = >0380
+       BYTE >02                        ; SPRPTB = >1000
+       BYTE >00                        ; Backdrop color
+*// GMODE
+
+********************************************************************************
+*
+* VDP Set Write Address
+*
+* R0: Address to set VDP address counter to
+*
+VWAD   MOVB @R0LB,@VDPWA               ; Send low byte of VDP RAM write address
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       ANDI R0,>3FFF                   ; Restore R0 top two MSbits
+       B    *R11
+*// VWAD
+
+********************************************************************************
+*
+* VDP Single Byte Write
+*
+* R0: Write address in VDP RAM
+* R1: MSB of R1 sent to VDP RAM
+*
+* R0 is modified, but can be restored with: ANDI R0,>3FFF
+*
+VSBW   MOVB @R0LB,@VDPWA               ; Send low byte of VDP RAM write address
+       ORI  R0,>4000                   ; Set read/write bits 14 and 15 to write (01)
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       MOVB R1,@VDPWD                  ; Write byte to VDP RAM
+       B    *R11
+*// VSBW
+
+*********************************************************************
+*
+* Fast CPU to VDP copy, replaces VMBW
+*
+* R0: Destination address
+* R1: Source address
+* R2: Number of bytes to copy
+*
+VDPCP  MOV  R11,*R10+                  ; Push return address onto the stack
+       SWPB R0
+       MOVB R0,@VDPWA                  ; Send low byte of VDP RAM write address
+       SWPB R0
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       LI   R0,VDPWD
+       MOV  R2,R3
+       SRL  R3,3                       ; Number of groups of 8
+       JEQ  VDPC2
+VDPC1  MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       COC  @VDPC7,R3
+       JNE  VDPC4
+       BL   @PLAYSNG
+VDPC4  DEC  R3
+       JNE  VDPC1
+       ANDI R2,>0007                   ; Isolate number of remaining bytes
+       JEQ  VDPC3
+VDPC2  MOVB *R1+,*R0
+       DEC  R2
+       JNE  VDPC2
+*      Return
+VDPC3  DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+VDPC7  DATA >0007
+*// VDPCP
+
+*********************************************************************
+*
+* Fast CPU to VDP write, replaces VSMW
+*
+* R0: Destination address
+* R1: Byte to write in MSB
+* R2: Number of bytes to copy
+*
+VDPWR  MOV  R11,*R10+                  ; Push return address onto the stack
+       SWPB R0
+       MOVB R0,@VDPWA                  ; Send low byte of VDP RAM write address
+       SWPB R0
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       LI   R0,VDPWD
+       MOV  R2,R3
+       SRL  R3,3                       ; Number of groups of 8
+       JEQ  VDPW2
+VDPW1  MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       COC  @VDPW7,R3
+       JNE  VDPW4
+       BL   @PLAYSNG
+VDPW4  DEC  R3
+       JNE  VDPW1
+       ANDI R2,>0007                   ; Isolate number of remaining bytes
+       JEQ  VDPW3
+VDPW2  MOVB R1,*R0
+       DEC  R2
+       JNE  VDPW2
+*      Return
+VDPW3  DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+VDPW7  DATA >0007
+*// VDPWR
+
+*********************************************************************
+*
+* Fast VDP to CPU read, replaces VMBR
+*
+* R0: Source address
+* R1: Destination address
+* R2: Number of bytes to copy
+*
+VDPRE  MOV  R11,*R10+                  ; Push return address onto the stack
+       SWPB R0
+       MOVB R0,@VDPWA                  ; Send low byte of VDP RAM read address
+       SWPB R0
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM read address
+       LI   R0,VDPRD
+       MOV  R2,R3
+       SRL  R3,3                       ; Number of groups of 8
+       JEQ  VDPR2
+VDPR1  MOVB *R0,*R1+
+       MOVB *R0,*R1+
+       MOVB *R0,*R1+
+       MOVB *R0,*R1+
+       MOVB *R0,*R1+
+       MOVB *R0,*R1+
+       MOVB *R0,*R1+
+       MOVB *R0,*R1+
+       COC  @VDPR7,R3
+       JNE  VDPR4
+       BL   @PLAYSNG
+VDPR4  DEC  R3
+       JNE  VDPR1
+       ANDI R2,>0007                   ; Isolate number of remaining bytes
+       JEQ  VDPR3
+VDPR2  MOVB *R0,*R1+
+       DEC  R2
+       JNE  VDPR2
+*      Return
+VDPR3  DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+VDPR7  DATA >0007
+*// VDPRE
+
+********************************************************************************
+*
+* VDP Write To Register
+*
+* R0 MSB: VDP register to write to
+* R0 LSB: Value to write
+*
+VWTR   MOVB @R0LB,@VDPWA               ; Send low byte (value) to write to VDP register
+       ORI  R0,>8000                   ; Set up a VDP register write operation (10)
+       MOVB R0,@VDPWA                  ; Send high byte (address) of VDP register
+       B    *R11
+*// VWTR
+
+********************************************************************************
+*
+* Include files
+*
+       COPY "charset2.a99"
+       COPY "logo.a99"
+
+NTBUF  EQU  $

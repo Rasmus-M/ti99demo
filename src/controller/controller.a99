@@ -1,0 +1,788 @@
+*********************************************************************
+* Filename: controller.a99
+* Bank:     0
+* Date:     05/01/2016
+* Author:   orbitaldecay
+* 
+* Control code for the demo. This immediately loads itself to >2000 and
+* executes from there. It loads data and code to high memory at >A000 and does
+* BL calls to various demo subroutines for screen loading.
+*********************************************************************
+
+       COPY "../common/HEADER.INC"
+
+* Addresses used by file loading routines
+
+PAB     EQU  >3B80     * PAB address in VDP RAM
+
+*********************************************************************
+* DO NOT CHANGE ANYTHING BELLOW HERE WITHOUT UPDATING THE HARDCODED
+* FUNCTION POINTERS IN .\SRC\COMMON\ROUTINES.INC!
+*********************************************************************
+
+* Load workspace pointer for control code
+       LWPI CTRLWP
+       
+* Copy 8K of this bank / file from its current location to lower expansion
+* memory then jump to CTRL in lower expansion memory
+
+       LI R0,START
+       LI R1,LMEMSP
+       LI R2,BANKLEN
+CPLP   MOV *R0+,*R1+
+       DECT R2
+       JNE CPLP
+       B @CTRL
+
+* Begin control code
+       XORG $-START+>2000
+       
+*********************************************************************
+* Draw Bitmap
+* Switches to graphics mode II and draws a full screen bitmap.
+* R1: Bank / file index containing pattern table
+* R2: Bank / file index containing color table
+* Example:
+*
+*      LI   R1, 1
+*      LI   R2, 2
+*      BL   @BITMAP
+*
+*********************************************************************
+       EVEN
+BITMAP
+       MOV  R11,@BMR11
+       LWPI  CTRLWP
+* Save all the variables we're going to use
+       MOV  R0,@BMR0
+       MOV  R1,@BMR1
+       MOV  R2,@BMR2
+       MOV  R3,@BMR3
+* Save bank containing color table in R4
+       MOV  R2,R4
+* Now we're going to switch to Graphics Mode II (see 6.1.2 in VDP programmers guide
+* and page 267 of E/A manual). We're leaving the screen disabled for now.
+       LI   R0,>0002
+       BL   @VWTR
+       LI   R0,>01A2 ; Screen disabled. Later we write 01E2 to enable.
+       BL   @VWTR
+       LI   R0,>020E
+       BL   @VWTR
+       LI   R0,>03FF
+       BL   @VWTR
+       LI   R0,>0403
+       BL   @VWTR
+       LI   R0,>0576
+       BL   @VWTR
+       LI   R0,>0603
+       BL   @VWTR
+       LI   R0,>0701 ; Backdrop color = black
+       BL   @VWTR
+
+* At this point VRAM is organized in the following fashion:
+*
+* Name              Start   End
+* Pattern Table     >0000   >17FF
+* Sprite Patterns   >1800   >1FFF
+* Color Table       >2000   >37FF
+* Name Table        >3800   >3AFF
+* Sprite Attributes >3B00   >3BFF
+* Unused            >3C00   >3FFF
+
+       BL   @PLAYSNG
+       
+* Load bank / file containing pattern table
+* Notice R1 already contains bank / file index
+       MOV  R1,R0           ; Bank / file index in R0
+       LI   R1,>0000        ; VDP destination in R1
+       LI   R2,>1800        ; Number of bytes to copy in R2
+       BL   @LDTOVDP
+
+       BL   @PLAYSNG
+
+* Load bank / file containing color table
+* Notice R1 already contains bank / file index
+       MOV  R4,R0           ; Bank / file index in R0
+       LI   R1,>2000        ; VDP destination in R1
+       LI   R2,>1800        ; Number of bytes to copy in R2
+       BL   @LDTOVDP
+* Write the following pattern to the Name Table:
+* 0, 1, ..., 255, 0, 1, ..., 255, 0, 1, ..., 255
+* (See 8.4.1 in the VDP programmers guide)
+       LI   R2,768   ; Length of name table
+       LI   R0,>3800 ; Address of name table
+       CLR  R1
+NTLP   SWPB R1
+       BL   @VSBW
+       SWPB R1
+       INC  R0
+       INC  R1
+       BL   @PLAYSNG
+       DEC  R2
+       JNE  NTLP
+* Enable the screen
+       LI   R0,>01E2
+       BL   @VWTR
+* Restore all the variables we used
+       MOV  @BMR0,R0
+       MOV  @BMR1,R1
+       MOV  @BMR2,R2
+       MOV  @BMR3,R3
+       MOV  @BMR11,R11  
+       RT
+       
+BMR0   DATA >0000
+BMR1   DATA >0000
+BMR2   DATA >0000
+BMR3   DATA >0000
+BMR11  DATA >0000
+
+*********************************************************************
+* Load To CPU RAM
+* If we're building a cartridge, this function switches to the bank
+* specified in Register 1 (0=BANK0, 1=BANK1) and copies R2 bytes to
+* the RAM at the address specified in Register 0. If we're loading
+* from disk, it copies the entire file specified in Register 1
+* (0=DEMOA, 1=DEMOB) to the RAM address in Register 0.
+*
+* 1. NOTICE THAT THIS TRASHES THE DATA IN THE VDP!!!
+* 2. DO NOT CALL THIS UNLESS YOU'VE SET LWPI >8300
+*
+* Example:
+*       LI  R0, 1       ; Bank 1
+*       LI  R1, >A000   ; To RAM address >A000
+*       LI  R2, >1800   ; Copy >1800 bytes
+*       BL  @LDTOVDP
+*
+*********************************************************************
+       EVEN
+LDTORAM
+       MOV  R11, @LRR11
+       LWPI  CTRLWP
+       MOV  R0, @LRR0
+       MOV  R1, @LRR1
+       MOV  R2, @LRR2
+       MOV  R3, @LRR3
+       
+       .ifdef CARTRIDGE
+       
+       SLA  R0,1
+       AI   R0,>6000
+       CLR  *R0
+       LI   R0,START    ; Make sure we don't copy the header
+MEMLP  MOV  *R0+,*R1+
+       BL   @PLAYSNG
+       DECT R2
+       JNE  MEMLP
+       
+       .else
+
+* Load file from disk with index R0 (e.g. DEMOA, DEMOB, etc.) to address
+* in RAM of R1 (copy R2 bytes). NOTE: This trashes VRAM!!!
+       
+* Save destination RAM address in R3 to use later
+       MOV  R1,R3
+* Load from file to VDP R0 = file index, R1 = >2000 (VDP dest),
+* R2 = # bytes to copy
+       CLR  R1
+       BL   @LDTOVDP
+* Copy from VDP to RAM. R0 = >0000 (VDP src), R1= RAM dest, R2= # bytes to copy
+       CLR  R0
+       MOV  R3,R1
+       BL   @VMBR
+       
+       .endif
+
+* Restore the variables we modified
+       MOV  @LRR0,R0
+       MOV  @LRR1,R1
+       MOV  @LRR2,R2
+       MOV  @LRR3,R3
+       MOV  @LRR11,R11
+
+       RT
+       
+LRR0   DATA >0000
+LRR1   DATA >0000
+LRR2   DATA >0000
+LRR3   DATA >0000
+LRR11  DATA >0000
+
+*********************************************************************
+* Load To VDP RAM
+* If we're building a cartridge, this function switches to the bank
+* specified in Register 1 (0=BANK0, 1=BANK1) and copies R2 bytes to
+* the VDP at the address specified in Register 0. If we're loading
+* from disk, it copies the entire file specified in Register 1
+* (0=DEMOA, 1=DEMOB) to the VDP address in Register 0.
+*
+* DO NOT CALL THIS UNLESS YOU'VE SET LWPI >8300!!
+*
+* Example:
+*       LI  R0, 1       ; Bank 1
+*       LI  R1, >2000   ; To VDP address >2000
+*       LI  R2, >1800   ; Copy >1800 bytes
+*       BL  @LDTOVDP
+*
+*********************************************************************
+       EVEN
+LDTOVDP
+       MOV  R11,@LVR11
+
+* Save all the variables we're going to modify
+       LWPI  CTRLWP
+
+       MOV  R0,@LVR0
+       MOV  R1,@LVR1
+       MOV  R2,@LVR2
+       MOV  R3,@LVR3
+       
+       .ifdef CARTRIDGE
+
+       SLA  R0,1
+       AI   R0,>6000
+       CLR  *R0
+       MOV  R1, R0    ; VDP Dest in R1
+       LI   R1, START ; Source in R0 (bytes to copy in R2)
+       BL   @VMBW
+       
+       .else
+
+* Load file from disk with index R0 (e.g. DEMOA, DEMOB, etc.) to address
+* in VRAM of R1 (copy R2 bytes). Big thanks the Asmusr here for providing
+* the example code which this is based off of.
+
+* Save the destination address in VRAM to the PAB structure
+       MOV   R1,@LDADDR
+       BL    @PLAYSNG
+* Mute all notes to prevent unpleasant noise
+       LI    R1, MUTETB
+       LI    R3, 4
+ML     MOVB  *R1+, @>8400
+       DEC   R3
+       JNE   ML
+* Clear song pointer to stop playback
+       MOV   @CURSNG,R3
+       CLR   @CURSNG
+* Save the current state in a temporary slot
+       LI    R1,STATE1
+       BL    @SAVEST
+* Load the original machine state
+       LI    R1,STATE0
+       BL    @LOADST
+
+       LIMI  0
+* Update the file name we're loading
+       MOV   @STATE1,R0         ; Grab index from temporary slot
+       AI    R0,65              ; R0 + 'A'
+       SWPB  R0
+       MOVB  R0,@FNAME+4
+* Copy PAB data into VDP RAM
+       LI    R0,PAB
+       LI    R1,PABDAT
+       LI    R2,PABDTE-PABDAT
+       BL    @VMBW  
+* Load file
+       LI    R0,PAB+9            ; Pointer to name length
+       MOV   R0,@FNPNTR          ; Store in >8356
+       BLWP  @DSRLNK             ; Open file
+       DATA  8
+       LIMI  0
+       LWPI  CTRLWP
+* Save the original machine state
+       LI    R1,STATE0
+       BL    @SAVEST
+
+* Load the current state from the temporary slot
+       LI    R1,STATE1
+       BL    @LOADST
+       MOV   R3,@CURSNG   
+       BL    @PLAYSNG
+* Restore song pointer and resume playing
+       .endif
+       
+* Restore all the variables we modified
+       MOV  @LVR0,R0
+       MOV  @LVR1,R1
+       MOV  @LVR2,R2
+       MOV  @LVR3,R3
+       MOV  @LVR11,R11
+
+       RT
+
+LVR0   DATA >0000
+LVR1   DATA >0000
+LVR2   DATA >0000
+LVR3   DATA >0000
+LVR11  DATA >0000
+
+* RDFILE
+PABDAT BYTE >05                  * I/O op-code (5=LOAD)
+       BYTE >00                  * Flags: n/a
+LDADDR DATA >0000                * Data buffer address (VDP RAM)
+       DATA >0000                * Record length: n/a
+       DATA >2100                * Max bytes to read
+       DATA >000A                * File name length (including DSK1.)
+DNAME  TEXT "DSK0."              * File device
+FNAME  TEXT "DEMOA"              * File name
+PABDTE
+
+*********************************************************************
+* Save State
+* Saves top >500 bytes of VRAM and scratchpad (>600 total) to address in R1. 
+* This code expects the current workspace pointer to be >8300.
+*
+* Example:
+*       LI   R1, >F000
+*       BL   SAVEST
+*
+*********************************************************************
+       EVEN
+SAVEST
+* Save all the variables we're going to use
+       MOV  R0,@SSR0
+       MOV  R1,@SSR1
+       MOV  R2,@SSR2
+       MOV  R3,@SSR3
+       MOV  R11,@SSR11
+* Save unmodified destination pointer
+       MOV  R1,R3
+* Copy 128 words (256 bytes) from scratchpad to R1
+       LI   R0,>8300
+       LI   R2,256
+SSLP   MOV  *R0+,*R1+
+       DECT R2
+       JNE  SSLP
+* Save R0 - R3 the way they looked when this function started
+       MOV  @SSR0,@0(R3)
+       MOV  @SSR1,@2(R3)
+       MOV  @SSR2,@4(R3)
+       MOV  @SSR3,@6(R3)
+       MOV  @SSR11,@22(R3)
+* Now copy 768 bytes from the top of the VDP to R1
+       LI   R0,>3B00   ; Copy from >3B00 in VDP
+       LI   R2,>500    ; Copy >500 bytes
+       BL   @VMBR
+* Restore the original values of all variables
+       MOV  @SSR0,R0
+       MOV  @SSR1,R1
+       MOV  @SSR2,R2       
+       MOV  @SSR3,R3
+       MOV  @SSR11,R11
+       RT
+       
+SSR0   DATA >0000
+SSR1   DATA >0000
+SSR2   DATA >0000
+SSR3   DATA >0000
+SSR11  DATA >0000
+
+*********************************************************************
+* Load State
+* Loads top >500 bytes of VRAM and scratchpad (>600 total) from address in R1.
+* This code expects the current workspace pointer to be >8300.
+*
+* Example:
+*       LI   R1, >F000
+*       BL   LOADST
+*
+*********************************************************************
+       EVEN
+LOADST
+* Save all the variables we're going to need
+       MOV  R1,@LSR1
+       MOV  R11,@LSR11
+* Copy 250 bytes from saved state to scratchpad (we don't want to 
+* mess up R0, R1, or R2 so we'll wait and copy those at the end)
+       LI   R0,>8306
+       AI   R1,6       
+       LI   R2,250
+LSLP   MOV  *R1+,*R0+
+       DECT R2
+       JNE  LSLP
+* Now copy 768 bytes from the top of the VDP to R1
+       LI   R0,>3B00   ; Copy from >3B00 in VDP
+       LI   R2,>500    ; Copy >500 bytes
+       BL   @VMBW
+* Copy R0, R1, and R2 from saved state
+       MOV  @LSR1,R1
+       MOV  @0(R1),R0
+       MOV  @4(R1),R2
+       MOV  @2(R1),R1
+       MOV  @LSR11,R11
+       RT
+       
+LSR1   DATA >0000
+LSR11  DATA >0000
+       
+*********************************************************************
+* VDP RAM Single Byte Write
+* Writes the value in the most-significant byte of Register 1 to the
+* VDP RAM address indicated in Register 0.
+* Trashes: R0
+*********************************************************************
+       EVEN
+VSBW   ORI  R0,>4000
+       SWPB R0
+       MOVB R0,@VDPWA
+       SWPB R0
+       MOVB R0,@VDPWA
+       MOVB R1,@VDPWD
+       RT
+
+*********************************************************************
+* VDP RAM Write Register
+* Writes the value in the least-significant byte of Register 0 to the
+* VDP Register indicated in the most-significant byte of Register 0.
+* This is identical in behavior to the VWTR procedure in the E/A
+* cart.
+* Trashes: R0
+*********************************************************************
+       EVEN
+VWTR   ORI  R0,>8000
+       SWPB R0
+       MOVB R0,@VDPWA
+       SWPB R0
+       MOVB R0,@VDPWA
+       NOP
+       RT
+       
+*********************************************************************
+* VDP RAM Multibyte Write
+* Writes the array at Register 1 to the VDP RAM location in Register
+* 0. Writes Register 2 bytes.
+* Trashes: R0, R1, R2
+*********************************************************************
+       EVEN
+VMBW   MOV  R11,@MBWS11
+       SWPB R0
+       MOVB R0,@VDPWA
+       SWPB R0
+       ORI  R0,>4000
+       MOVB R0,@VDPWA
+MBWLP  MOVB *R1+,@VDPWD
+       BL   @PLAYSNG
+       DEC  R2
+       JNE  MBWLP
+       MOV  @MBWS11,R11
+       RT
+MBWS11 DATA >0000
+
+*********************************************************************
+* VDP RAM Multibyte Read
+* Reads R2 bytes from VDP Ram at address R0 to system RAM at address
+* contained in R1.
+* Trashes: R0, R1, R2
+*********************************************************************
+       EVEN
+VMBR   MOV  R11,@MBRS11
+       SWPB R0
+       MOVB R0, @VDPWA
+       SWPB R0
+       ANDI R0, >3FFF
+       MOVB R0, @VDPWA
+MBRLP  MOVB @VDPRD, *R1+
+       BL   @PLAYSNG
+       DEC  R2
+       JNE  MBRLP
+       MOV @MBRS11,R11
+       RT
+MBRS11 DATA >0000
+
+*********************************************************************
+* Play Song
+* Plays the currently loaded song in a loop. If @VDPINT is zero on exit,
+* then we bailed because we haven't hit a VDP interrupt yet.
+*********************************************************************
+PLAYSNG
+* If we're not currently on the vblank then quit
+       CLR  @VDPINT
+
+       MOV  R12, @SAVR12
+
+       CLR  R12
+       TB   2                          ; Test CRU bit for VDP interrupt
+       JEQ  BYE2                       ; This is supposedly more reliable than polling the status
+
+       MOV  R1, @SAVR1
+       MOV  R2, @SAVR2
+       MOV  R11, @SAVR11
+
+       MOVB @VDPSTA, @VDPINT
+       INC  @TIME
+
+* If no song is loaded, then quit
+       MOV  @CURSNG, R12
+       JEQ  BYE
+       
+* Play the song
+       BL   @STPLAY
+       LWPI CTRLWP
+
+* Check for song end
+       MOVB @SONGWP+14, R12
+       JNE  BYE
+
+* Play again
+       CLR  R2
+       MOV  @CURSNG,R1
+       BL   @STINIT
+
+* Cleanup
+BYE
+       MOV  @SAVR1, R1
+       MOV  @SAVR2, R2
+       MOV  @SAVR11, R11
+BYE2
+       MOV  @SAVR12, R12
+       RT
+
+TIME   DATA >0000
+CURSNG DATA >0000
+VDPINT DATA >0000
+SAVR12 DATA >0000
+SAVR1  DATA >0000
+SAVR2  DATA >0000
+SAVR11 DATA >0000
+
+********************************************************************************
+* Set max number of open files (by asmusr)
+* R0: Max number of open files
+********************************************************************************
+       .ifndef CARTRIDGE
+FILES   MOV  R11,@FSAVR11        * Push return address onto the stack
+	    MOV	 R0,@NFILES          * Save #files argument
+	    LI   R0,PAB
+        LI   R1,PDATA
+        LI   R2,2
+        BL	 @VMBW               * Copy 2 bytes from PDATA (RAM) to PAB (VRAM)
+	    LI   R0,PAB
+        MOV  R0,@>8356           * Point to subroutine in DSR
+        MOVB @NFILES+1,@>834C    * #files argument for subroutine 016h
+        BLWP @DSRLNK             * Call DSR with subprogram option
+        DATA 10
+*	    Return
+	    MOV  @FSAVR11,R11
+	    B	*R11
+
+NFILES  DATA >0001               * Number of simultaneous files
+PDATA   DATA >0116               * DSR subprogram to run (FILES)
+FSAVR11 DATA >0000
+
+* Disk access routines
+       COPY "gpllnk.a99"
+       COPY "dsrlnk.a99"
+       .endif
+       
+* Copy player code
+       COPY "tiplayer30hz.a99"
+       
+*********************************************************************
+* DO NOT CHANGE ANYTHING ABOVE HERE WITHOUT UPDATING THE HARDCODED
+* FUNCTION POINTERS IN .\SRC\COMMON\ROUTINES.INC!
+*********************************************************************
+
+*********************************************************************
+* Main control code
+*********************************************************************
+CTRL
+* Disable all interrupts
+       LIMI 0
+       
+* If we're loading from disk, copy the disk name over
+* Code copied more or less verbatim from:
+* 1.7. The Art Of Assembly Part 7. Why A Duck?
+* By Bruce Harrison 1991
+* Thanks to Asmusr for hooking me up with this.
+       .ifndef CARTRIDGE
+       MOV    @>83D0,R12           * GET THE CRU BASE IN R12
+       MOV    @>83D2,R9            * GET THE ROM ADDRESS FOR DEVICE
+       SBO    0                    * ENABLE THE ROM
+       AI     R9,4                 * ADDING FOUR PUTS US AT THE LENGTH BYTE
+       MOVB   *R9+,R4              * PLACE THAT IN R4 AND INCREMENT R9
+       SRL    R4,8                 * RIGHT JUSTIFY LENGTH IN R4
+       LI     R10,DNAME            * POINT TO TEXT BUFFER
+MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
+       DEC    R4                   * FINISHED?
+       JNE    MOVIT                * NO, DO ANOTHER BYTE
+       SBZ    0                    * DISABLE THE ROM
+       .endif
+       
+* If we're loading from disk, reduce the number of simultaneous files to 1
+       .ifndef CARTRIDGE
+       LI   R0, 1
+       BL   @FILES
+       .endif
+
+* Save the original state of the machine before we go messing around
+       LI   R1,STATE0
+       BL   @SAVEST
+       
+       LI   R6,SCNLST       ; Scene list pointer
+       CLR  R7              ; Current song bank/index
+       CLR  R8              ;
+
+* Enter main loop       
+LOOP
+* Blank screen
+       LI   R0, >01A1
+       BL   @VWTR
+
+* Load effect into high area memory at >A000 (we have 20K to work with)
+       MOV  *R6+,R0         ; Copy bank / file index for effect to R0
+       LI   R1,FXMEM        ; RAM destination in R1
+       LI   R2,>2000        ; Number of bytes to copy in R2
+       BL   @LDTORAM        ; Copy from bank / file index R0 to RAM at R1
+       
+* Don't load if we're playing the same song
+       C    *R6,R7
+       JEQ  NOLDMSX
+
+       MOV  *R6,R7          ; Save current song indices
+       BL   @STSTOP         ; Stop the music
+       
+* Load song into high area memory at >F000 (we have 4K to work with)
+       
+       MOVB *R6+,R0         ; Bank / file index in R0 (song list ptr is in R6)
+       MOVB *R6+,R3         ; Song index in R5
+       SRL  R0,8            ; Shift high byte down
+       SRL  R3,7            ; Low byte of R3 = song index * 2
+
+       CLR  @CURSNG
+       LI   R1,SONGMEM      ; RAM destination in R1
+       LI   R2,>1000        ; Number of bytes to copy in R2
+       BL   @LDTORAM        ; Copy from bank / file index R0 to RAM at R1
+
+       CLR  R2              ; only one tune
+       MOV  @SONGMEM(R3),R1 ; Address of VGM song
+       MOV  R1,R8
+       BL   @STINIT         ; Initialize song player
+       JMP  NOINC
+       
+NOLDMSX
+       INCT R6
+       
+NOINC
+       MOV  @FXMEM+2,R1     ; Pointer to effect frame renderer
+       CLR  R2              ; Clear render loop counter
+       CLR  @TIME           ; Reset time
+       BL   @SVWP
+       MOV  @FXMEM+0,R0     ; Pointer to effect initialization
+       BL   *R0             ; Initialize effect
+       BL   @LDWP
+       MOV  R8,@CURSNG
+
+RENDER                      ; Render frames until the effect says stop
+
+VSYNC  BL   @PLAYSNG        ; Play music
+       MOV  @VDPINT,R0
+       JEQ  VSYNC
+
+* Fast keyboard scan routine. Skip to next effect when spacebar is pressed.
+* Ripped from http://www.unige.ch/medecine/nouspikel/ti99/tutor1.htm
+
+       LI   R13,>0000       ; keyboard column 0
+       LI   R12,>0024       ; CRU address of the decoder
+       LDCR R13,3           ; select the column
+       LI   R12,>0006       ; address of the first row
+       STCR R14,8           ; read 8 rows
+       MOV  R14,R13         ; make a copy
+       ANDI R14,>0200       ; test spacebar
+       JEQ  SKIPFX          ; pressed
+       ANDI R13,>1100       ; test quit
+       JEQ  QUIT
+       
+       MOV  @TIME,R3        ; Copy frame counter over
+       BL   @SVWP
+       BL   *R1             ; Render frame
+       BL   @LDWP
+       INC  R2
+       CI   R0,>0000        ; If R0!=0, then bail on render loop
+       JEQ  RENDER
+
+SKIPFX
+       MOV  *R6,R4
+       CI   R4,>0000        ; If next effect is zero, then bail
+       JNE  LOOP
+       
+QUIT   CLR  @>83C4          ; Reset user ISR address
+       BLWP @>0000          ; Reboot
+       
+SVWP   LI   R0, WPBU+2
+       MOV  R1, *R0+
+       MOV  R2, *R0+
+       MOV  R3, *R0+
+*       MOV  R4, *R0+
+*       MOV  R5, *R0+
+       MOV  R6, *R0+
+       MOV  R7, *R0+
+       MOV  R8, *R0+
+*       MOV  R9, *R0+
+*       MOV  R10, *R0+
+*       INCT R0
+*       MOV  R12, *R0+
+*       MOV  R13, *R0+
+*       MOV  R14, *R0+
+*       MOV  R15, *R0+
+       B    *R11
+
+LDWP   LI   R15,WPBU+2
+       MOV  *R15+, R1
+       MOV  *R15+, R2
+       MOV  *R15+, R3
+*       MOV  *R15+, R4
+*       MOV  *R15+, R5
+       MOV  *R15+, R6
+       MOV  *R15+, R7
+       MOV  *R15+, R8
+*       MOV  *R15+, R9
+*       MOV  *R15+, R10
+*       INCT R15
+*       MOV  *R15+, R12
+*       MOV  *R15+, R13
+*       MOV  *R15+, R14
+*       MOV  *R15+, R15
+       B    *R11
+       
+WPBU    DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
+        DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
+*********************************************************************
+* Scene List
+*
+* This is a list of effects and songs that will be played in the
+* order they are provided.
+*
+* The first word is a bank / file index of an effect. The high byte of the
+* second word is the bank / file index of a song bank. The low byte of the 
+* second word is the index of the song within the song bank. 
+* See ./src/effects/music/songbank1.a99 for an example of a song bank.
+*********************************************************************
+       EVEN
+SCNLST
+       DATA >0010, >0500  ; Bank 16: Checkerboard zoom                 Mode 1
+
+       DATA >001E, >0500  ; Bank 30: Don't mess with Texas (image)     Mode 2
+       DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
+       DATA >0019, >0500  ; Bank 25: Spinning box animation (decoder)  Mode 2 hybrid
+       DATA >0016, >0500  ; Bank 22: Infinite dots                     Mode 1
+       DATA >0015, >0500  ; Bank 21: Multicolor rotozoom               Mode 3
+       DATA >0011, >0500  ; Bank 17: Infinite bobs                     Mode 2
+       DATA >000A, >0500  ; Bank 10: Boing ball                        Mode 2
+       DATA >0010, >0500  ; Bank 16: Checkerboard zoom                 Mode 1
+
+       DATA >000E, >0500  ; Bank 14: Multiplane                        Mode 1
+       DATA >0009, >0501  ; Bank 9: Metaballs                          Mode 1
+       DATA >0008, >0501  ; Bank 8: Square tunnel                      Mode 1
+       DATA >0006, >0501  ; Bank 6: Raycaster                          Mode 2
+       DATA >0003, >0500  ; Bank 3: Dot fx                             Mode 2 hybrid
+       DATA >0004, >0500  ; Bank 4: Lena image                         Mode 2
+*      DATA >0003, >0500  ; Bank 3: Dot fx
+*      DATA >0004, >0501  ; Bank 4: Lena (image)
+
+       DATA >000C, >0500  ; Bank 12: Twister and scroller              Mode 2 hybrid
+       DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
+       DATA >0017, >0500  ; Bank 23: Multisplit                        Mode 1/2/3
+       DATA >0013, >0500  ; Bank 19: Splitscreen 3D scroller           Mode 1
+       DATA >001F, >2000  ; Bank 31: Credits scroller                  Mode 1
+       DATA >0000, >0000  ; Zero signifies reboot
+       END

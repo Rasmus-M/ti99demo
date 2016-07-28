@@ -1,0 +1,326 @@
+*********************************************************************
+* Filename: equalizer.a99
+* Bank:     3
+* Date:     05/04/2016
+* Author:   orbitaldecay
+* 
+* A simple nametable plasma effect
+*********************************************************************
+
+       COPY "../../common/HEADER.INC"
+       COPY "../../common/ROUTINES.INC"
+       
+FXWP   EQU  FREEWP
+R0LB   EQU  FXWP+1
+R1LB   EQU  FXWP+3
+R2LB   EQU  FXWP+5
+R3LB   EQU  FXWP+7
+R4LB   EQU  FXWP+9
+R5LB   EQU  FXWP+11
+FCNT   EQU  CTRLWP+4
+TIME   EQU  CTRLWP+6
+NTFUNC EQU  >8360
+
+       XORG FXMEM
+
+*********************************************************************
+* Effect header
+*
+* The first two words of an effect file must be a pointer to an initialization
+* routine and a pointer to a frame rendering routine, respectively. The
+* initialization routine will be called once when the effect is loaded and the
+* frame rendering routine will be called at 60hz.
+*********************************************************************
+
+       DATA INIT
+       DATA FRAME
+       
+*********************************************************************
+* Initialization routine
+*
+* This simple example just draws a picture on the screen. Notice if
+* you're planning on using the default workspace (>8300) you must be
+* restore ALL original values.
+*********************************************************************
+INIT
+* Save original register values (or change workspace from >8300)
+       MOV  R11, @SAVR11
+       LWPI FXWP
+       
+* Copy nametable generation function to >8360
+       LI   R0, NTSTRT
+       LI   R1, NTFUNC
+       LI   R2, NTEND-NTSTRT
+CPLP   MOV  *R0+, *R1+
+       DECT R2
+       JNE  CPLP
+
+* Initialize graphics mode II       
+       LI   R0,>0002
+       BL   @VWTR
+       LI   R0,>01A2 ; Screen disabled. Later we write 01E2 to enable.
+       BL   @VWTR
+       LI   R0,>020E
+       BL   @VWTR
+       LI   R0,>039F
+       BL   @VWTR
+       LI   R0,>0400
+       BL   @VWTR
+       LI   R0,>0576
+       BL   @VWTR
+       LI   R0,>0603
+       BL   @VWTR
+       LI   R0,>0701 ; Backdrop color = black
+       BL   @VWTR
+
+* At this point VRAM is organized in the following fashion:
+*
+* Name              Start   End
+* Pattern Table     >0000   >7FF    ; Repeated for each 3rd
+* Sprite Patterns   >1800   >1FFF
+* Color Table       >2000   >27FF   ; Repeated for each 3rd
+* Name Table        >3800   >3AFF
+* Sprite Attributes >3B00   >3BFF
+* Unused            >3C00   >3FFF
+*
+
+* Copy pattern table       
+       CLR  R0
+       LI   R3, 16
+PTLP   LI   R1, PAT1
+       LI   R2, 128
+       BL   @VMBW
+       AI   R0, 128
+       LWPI CTRLWP
+       BL   @PLAYSNG
+       LWPI FXWP
+       DEC  R3
+       JNE  PTLP
+       
+* Copy color table       
+       LI   R0, >2000
+       LI   R3, 16
+CTLP   LI   R1, COLTAB
+       LI   R2, 128
+       BL   @VMBW
+       AI   R0, 128
+       LWPI CTRLWP
+       BL   @PLAYSNG
+       LWPI FXWP       
+       DEC  R3
+       JNE  CTLP
+
+       LWPI CTRLWP       
+       MOV  @SAVR11, R11
+       RT
+       
+* 1 2 4 8 1 2 4 8
+* . . . . . . . .
+* . . . . . . . .
+* . . . . . . . .
+* . . . x x . . .
+* . . . x x . . .
+* . . . . . . . .
+* . . . . . . . .
+* . . . . . . . .
+
+PAT0   BYTE >00, >00, >00, >18, >18, >00, >00, >00
+       BYTE >00, >00, >00, >18, >18, >00, >00, >00
+       BYTE >00, >00, >00, >18, >18, >00, >00, >00
+       BYTE >00, >00, >00, >18, >18, >00, >00, >00
+       BYTE >00, >00, >00, >18, >18, >00, >00, >00
+       BYTE >00, >00, >00, >18, >18, >00, >00, >00
+       BYTE >00, >00, >00, >18, >18, >00, >00, >00
+       BYTE >00, >00, >00, >18, >18, >00, >00, >00       
+
+* 1 2 4 8 1 2 4 8
+* . . . . . . . .
+* . . . . . . . .
+* . . . x x . . .
+* . . x x x x . .
+* . . x x x x . .
+* . . . x x . . .
+* . . . . . . . .
+* . . . . . . . .
+
+PAT1   BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
+       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
+       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
+       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
+       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
+       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
+       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
+       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00       
+
+* 1 2 4 8 1 2 4 8
+* . . . . . . . .
+* . . . x x . . .
+* . . x x x x . .
+* . x x x x x x .
+* . x x x x x x .
+* . . x x x x . .
+* . . . x x . . .
+* . . . . . . . .
+
+PAT2   BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
+       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
+       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
+       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
+       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
+       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
+       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
+       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00       
+
+* 1 2 4 8 1 2 4 8
+* . . . x x . . .
+* . . x x x x . .
+* . x x x x x x .
+* x x x x x x x x
+* x x x x x x x x
+* . x x x x x x .
+* . . x x x x . .
+* . . . x x . . .
+
+PAT3   BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
+       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
+       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
+       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
+       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
+       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
+       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
+       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18       
+       
+COLTAB BYTE >F0, >F0, >F0, >F0, >F0, >F0, >F0, >F0
+       BYTE >70, >70, >70, >70, >70, >70, >70, >70
+       BYTE >50, >50, >50, >50, >50, >50, >50, >50
+       BYTE >40, >40, >40, >40, >40, >40, >40, >40
+       BYTE >40, >40, >40, >40, >40, >40, >40, >40
+       BYTE >50, >50, >50, >50, >50, >50, >50, >50
+       BYTE >70, >70, >70, >70, >70, >70, >70, >70
+       BYTE >F0, >F0, >F0, >F0, >F0, >F0, >F0, >F0
+       BYTE >F0, >F0, >F0, >F0, >F0, >F0, >F0, >F0
+       BYTE >90, >90, >90, >90, >90, >90, >90, >90
+       BYTE >80, >80, >80, >80, >80, >80, >80, >80
+       BYTE >60, >60, >60, >60, >60, >60, >60, >60
+       BYTE >60, >60, >60, >60, >60, >60, >60, >60
+       BYTE >80, >80, >80, >80, >80, >80, >80, >80
+       BYTE >90, >90, >90, >90, >90, >90, >90, >90
+       BYTE >F0, >F0, >F0, >F0, >F0, >F0, >F0, >F0       
+       
+       
+NTPLSM
+       COPY "ntplasma.a99"
+
+       EVEN
+NTSTRT MOVB @R0LB, @VDPWA  
+       MOVB R0, @VDPWA
+       LI   R0, R5LB
+       LI   R3, 768
+NTLP1  MOVB *R0,*R4
+       INC  R1
+       MOV  *R1, R5
+       A    R2, R5
+       LWPI CTRLWP
+       BL   @PLAYSNG
+       LWPI FXWP
+       DEC  R3
+       JNE  NTLP1
+       RT
+       EVEN
+NTEND
+       
+*********************************************************************
+* Frame rendering routine
+*
+* This example does nothing except bail after 600 frames. Notice
+* when the control code calls this routine it populates the
+* following registers in workspace >8300 with the following values:
+*
+* R2 <= The current frame count for this effect
+* R3 <= The number of elapsed ticks since the begining of the effect (1/60 s)
+*
+* These values may differ for effects that don't run at 60 hz.
+* This routine must set R0 in workspace >8300 to zero if it wishes
+* for the render loop to continue, or set R0 in workspace >8300 to a
+* non-zero value to tell the control code to move to the next effect.
+* R0 is the only register in >8300 that this code is allowed to
+* modify. All other registers must be restored before returning.
+*
+* You have roughly 40,000 cycles to use in this function. Use them
+* wisely...
+*
+* If you want to sync your effect with music, check out the values
+* in @SONGWP+22, @SONGWP+24, @SONGWP+26, and @SONGWP+28.
+*
+*********************************************************************
+FRAME
+       MOV  R11, @SAVR11
+* Save original register values (or change workspaces from >8300)
+       LWPI FXWP
+
+* Enable the screen
+       LI   R0,>01E2
+       BL   @VWTR
+
+* Run nametable generator in scratchpad ram
+       LI   R1, NTPLSM
+       LI   R4, VDPWD
+       MOV  @FCNT, R2
+       LI   R0, >7800   ; >3800 | >4000
+       BL   @NTFUNC
+
+       LWPI CTRLWP
+       
+* Bail after 600 ticks (10 seconds)
+       CI   R3, 600
+       JGT  QUIT
+       CLR  R0
+       JMP  RETURN
+QUIT
+       SETO R0
+RETURN
+       MOV  @SAVR11, R11
+       RT
+
+*********************************************************************
+* VDP RAM Multibyte Write
+* Writes the array at Register 1 to the VDP RAM location in Register
+* 0. Writes Register 2 bytes.
+* Trashes: R0, R1, R2
+*********************************************************************
+       EVEN
+VMBW   SWPB R0
+       MOVB R0,@VDPWA
+       SWPB R0
+       ORI  R0,>4000
+       MOVB R0,@VDPWA
+MBWLP  MOVB *R1+,@VDPWD
+       DEC  R2
+       JNE  MBWLP
+       RT
+
+*********************************************************************
+* VDP RAM Write Register
+* Writes the value in the least-significant byte of Register 0 to the
+* VDP Register indicated in the most-significant byte of Register 0.
+* This is identical in behavior to the VWTR procedure in the E/A
+* cart.
+* Trashes: R0
+*********************************************************************
+       EVEN
+VWTR   ORI  R0,>8000
+       SWPB R0
+       MOVB R0,@VDPWA
+       SWPB R0
+       MOVB R0,@VDPWA
+       NOP
+       RT
+
+SAVR0  DATA >0000       
+SAVR1  DATA >0000
+SAVR2  DATA >0000
+SAVR11 DATA >0000
+       
+       END
+
+       

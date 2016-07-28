@@ -1,0 +1,518 @@
+*********************************************************************
+* Filename: raytracer.a99
+* Bank:     6
+* Date:     05/13/2016
+* Author:   orbitaldecay
+* 
+* A precalculated raycaster that renders at around 30 fps.
+*********************************************************************
+
+       COPY "../../common/HEADER.INC"
+       COPY "../../common/ROUTINES.INC"
+
+CEILC   EQU  >0700           ; Ceiling color is cyan
+LWALLC  EQU  >0500           ; Light wall color is light blue
+DWALLC  EQU  >0400           ; Dark wall color is dark blue
+FLOORC  EQU  >0C00           ; Floor color is dark green
+
+BUFFER  EQU  >3820           ; 32 byte buffer
+HEIGHT  EQU  >3860           ; 64 bytes for column height table
+CODE    EQU  >38A0           ; 96 bytes for code in scratch pad
+
+
+FXWP    EQU  FREEWP
+LBR0    EQU  FXWP+1
+LBR1    EQU  FXWP+3
+LBR3    EQU  FXWP+7
+LBR8    EQU  FXWP+17
+LBR14   EQU  FXWP+29
+LBR15   EQU  FXWP+31
+       
+       XORG FXMEM
+
+       DATA INIT
+       DATA FRAME
+       
+******************************************************************************
+* Initialization routine
+INIT
+        MOV  R0, @SAVR0
+        MOV  R1, @SAVR1
+        MOV  R2, @SAVR2
+        MOV  R11, @SAVR11
+        
+        LI   R0, 7
+        LI   R1, WALLS
+        LI   R2, >2000
+        BL   @LDTORAM
+
+        MOV  @SAVR11, R11
+        MOV  @SAVR0, R0
+        MOV  @SAVR1, R1
+        MOV  @SAVR2, R2
+        LWPI FXWP
+
+* Switch to bitmap mode
+* Now we're going to switch to Graphics Mode II (see 6.1.2 in VDP programmers guide
+* and page 267 of E/A manual). We're leaving the screen disabled for now.
+        LI   R0,>0002
+        BL   @VWTR
+        LI   R0,>01A2 ; Screen disabled. Later we write 01E2 to enable.
+        BL   @VWTR
+        LI   R0,>020E
+        BL   @VWTR
+        LI   R0,>03FF
+        BL   @VWTR
+        LI   R0,>0403
+        BL   @VWTR
+        LI   R0,>0576
+        BL   @VWTR
+        LI   R0,>0603
+        BL   @VWTR
+        LI   R0,>0701 ; Backdrop color = black
+        BL   @VWTR
+
+* At this point VRAM is organized in the following fashion:
+*
+* Name              Start   End
+* Pattern Table     >0000   >17FF
+* Sprite Patterns   >1800   >1FFF
+* Color Table       >2000   >37FF
+* Name Table        >3800   >3AFF
+* Sprite Attributes >3B00   >3BFF
+* Unused            >3C00   >3FFF
+
+* Write pattern table (>0F, >0F, >0F, >0F, ...)
+        LI   R0, >4000      ; >0000 | >4000
+        MOVB @LBR0, @VDPWA        
+        MOVB R0, @VDPWA
+        LI   R1, VDPWD
+        LI   R2, 512
+        LI   R3, >0F00
+        LI   R4, >000F
+PTLP    MOVB R3, *R1
+        MOVB R3, *R1
+        MOVB R3, *R1
+        MOVB R3, *R1
+        MOVB R3, *R1
+        MOVB R3, *R1
+        MOVB R3, *R1
+        MOVB R3, *R1
+        CZC  R4, R2                     ; Call music every 16th time
+        JNE  PTLP1
+        BL   @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP
+PTLP1   DEC  R2
+        JNE  PTLP
+        
+* Write color table for first third
+        LI   R0, >6000      ; >2000 | >4000
+        LI   R1, 1          ; Initial
+        LI   R10, 1         ; Increment
+        LI   R15, CEILC
+        BL   @PNC
+        
+* Write color table for second third
+        LI   R0, >6800      ; >2800 | >4000
+        LI   R1, 4          ; Initial
+        LI   R10, -1        ; Increment
+        LI   R15, FLOORC
+        BL   @PNC
+
+* Copy status bar pattern table        
+        LI   R0, >5000      ; >1000 | 4000
+        LI   R1, STATUSP
+        LI   R2, >600
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, VDPWD
+PTLP2   MOVB *R1+, *R0
+        DEC  R2
+        JNE  PTLP2
+
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP
+
+* Copy status bar color table
+        LI   R0, >7000      ; >3000 | 4000
+        LI   R1, STATUSC
+        LI   R2, >600
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, VDPWD
+CTLP    MOVB *R1+, *R0
+        DEC  R2
+        JNE  CTLP
+
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP
+
+* Clear char 255 of last pattern table - Added by Asmusr
+        LI   R0, >57F8 ; (>17F8 | >4000)
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, VDPWD
+        LI   R2, 8
+PTLP3   CLR  *R0
+        DEC  R2
+        JNE  PTLP3
+        LI   R0, >77F8 ; (>37F8 | >4000)
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, VDPWD
+        LI   R2, 8
+CTLP3   CLR  *R0
+        DEC  R2
+        JNE  CTLP3
+
+* Blank nametable
+        LI   R2, 256   ; Length of name table
+        LI   R0, >7A00 ; Address of 3rd part of name table (>3A00 | >4000)
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, VDPWD
+        LI   R1, >FF00
+NTLP1   MOVB R1, *R0
+        DEC  R2
+        JNE  NTLP1
+
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP
+
+        LI   R2, 192   ; Length of name table
+        LI   R0, >7A40 ; Address of 3rd part of name table (>3A20 | >4000)
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, VDPWD
+        CLR  R1
+NTLP2   MOVB @LBR1, *R0
+        INC  R1
+        DEC  R2
+        JNE  NTLP2
+        
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP
+
+* Blank nametable
+        LI   R2, 256   ; Length of name table
+        LI   R0, >5A00 ; Address of 3rd part of name table (>1A00 | >4000)
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, VDPWD
+        LI   R1, >FF00
+NTLP3   MOVB R1, *R0
+        DEC  R2
+        JNE  NTLP3
+        
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP
+
+        LI   R2, 192
+        LI   R0, >5A40 ; Address of 3rd part of name table (>1A20 | >4000)
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, VDPWD
+        CLR  R1
+NTLP4   MOVB @LBR1, *R0
+        INC  R1
+        DEC  R2
+        JNE  NTLP4
+        
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP
+
+        LWPI CTRLWP
+        MOV  @SAVR11, R11
+        RT
+
+SAVR0   DATA >0000
+SAVR1   DATA >0000
+SAVR2   DATA >0000
+
+* Write pattern and color tables for one third of the screen
+PNC     MOV  R11, @PNCR11
+        LI   R3, 5
+        LI   R4, 4
+LPL     MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R5, 5
+        LI   R6, 4
+        LI   R8, LWALLC        
+LPR1    BL   @CG
+        DATA LWALLC
+        BL   @CG
+        DATA DWALLC
+        DEC  R6
+        DEC  R5
+        JNE  LPR1
+        AI   R0, 128
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R5, 5
+        LI   R6, 4
+        LI   R8, DWALLC        
+LPR2    BL   @CG
+        DATA LWALLC
+        BL   @CG
+        DATA DWALLC
+        DEC  R6
+        DEC  R5
+        JNE  LPR2
+        LWPI CTRLWP
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP
+        AI   R0, 128
+        DEC  R4
+        DEC  R3
+        JNE  LPL
+        MOV  @PNCR11, R11
+        RT
+
+PNCR11  DATA >0000
+
+* R15: bg color, R8: left wall, *R11: right wall color
+CG      LI   R7, 4
+        MOV  R1, R9
+LPC     C    R9, R6
+        JGT  RON
+        MOV  R15, R13
+        JMP  SRON
+RON     MOV  *R11, R13
+SRON    C    R9, R4
+        JGT  LON
+        MOV  R15, R14
+        JMP  SLON
+LON     MOV  R8, R14
+SLON    SLA  R14, 4
+        SOC  R13, R14
+        MOVB R14, @VDPWD
+        MOVB R14, @VDPWD
+        A    R10, R9
+        DEC  R7
+        JNE  LPC
+        INCT R11
+        B    *R11
+
+******************************************************************************        
+* Frame render routine
+FRAME
+        MOV  R11, @SAVR11
+        LWPI FXWP
+
+        LIMI 0
+        
+* Copy scan loop, decoder, and VDP copy loop to scratchpad
+        LI   R0, SCAN
+        LI   R1, SPSCAN
+        LI   R2, VEND-SCAN
+CPLP    MOV  *R0+, *R1+
+        DECT R2
+        JNE  CPLP
+                
+* Decode compressed frame
+        MOV  @WPTR, R0
+        LI   R15, HEIGHT
+        LI   R4, 64
+        CLR  R2
+        CLR  R3
+        CLR  R7
+        BL   @SPDECD
+        MOV  R0, @WPTR
+
+* Figure out if its quitting time
+        INCT R0
+        MOV  *R0, R0
+        JNE  NORS
+        LI   R0, WALLS
+        SETO @CTRLWP
+        MOV  R0, @WPTR
+        JMP  NEXT
+NORS    CLR  @CTRLWP
+NEXT
+
+* Calculate address of nametable double buffer
+        MOV  @NSPACE, R0
+        LI   R1, >2000
+        XOR  R1, R0          ; Toggle between >3800 and >1800
+        MOV  R0, @NSPACE
+        MOV  R0, R14
+        AI   R14, >0200
+        MOV  R0, R15
+        AI   R15, -32
+        
+* Write nametable
+        LI   R1, 8           ; Y
+        LI   R3, >0800       ; Increment per row (8)
+        LI   R7, LBR8
+        CLR  R8
+        LI   R9, LBR14
+        LI   R10, LBR15 
+        LI   R12, VDPWD
+        LI   R13, VDPWA
+LOOP    LI   R0, BUFFER
+        LI   R2, 32          ; X
+        LI   R6, HEIGHT      ; Address of column height table
+        A    R2, R15
+        S    R2, R14
+        BL   @SPSCAN
+
+* Copy to VDP
+* Top third
+        LI   R0, BUFFER
+        MOVB *R10, *R13
+        MOVB R15, *R13
+        LI   R2, 4
+        BL   @SPVCP
+        
+* Bottom third
+        LI   R0, BUFFER
+        MOVB *R9, *R13
+        MOVB R14, *R13
+        LI   R2, 4
+        BL   @SPVCP
+        
+* Give the music some time to play
+        LWPI CTRLWP
+        BL   @PLAYSNG
+        LWPI FXWP
+
+        DEC  R1 
+        JNE  LOOP
+        ; Roughly 64,000 cycles per frame
+        
+* Flip nametable
+        MOV  @NSPACE, R0
+        SRL  R0, 10
+        ORI  R0, >0200
+        BL   @VWTR
+
+* Enable the screen
+        LI   R0,>01E2
+        BL   @VWTR
+        
+        LWPI CTRLWP
+        MOV  @SAVR11, R11
+        RT
+
+* Height of wall in this pattern << 1 | color bit
+CLAMP
+        BYTE 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1
+        BYTE 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1
+        BYTE 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1
+        BYTE 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1
+        
+        BYTE 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 8, 9, 8, 9, 8, 9
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9
+
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9
+
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9
+        BYTE 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9, 8, 9        
+        
+SAVR11  DATA >0000
+NSPACE  DATA >7800
+        
+* Move me to scratch pad \/ \/ \/ ****************************
+* This code computes a nametable row for the first third of the screen and the
+* second third of the screen. We'll write this row to a buffer in scratch pad,
+* then copy it to the VDP twice.
+
+        EVEN
+SCAN    AB   R3, *R6         ; Height1 += 8         18C +  5M   2b
+        MOVB *R6+, *R7       ;                      24C +  7M   2b
+        MOVB @CLAMP(R8), R5  ; Clamp[0,4]<<1 | Col  22C +  6M   4b
+        AB   R3, *R6         ; Height2 += 8         18C +  5M   2b
+        MOVB *R6+, *R7       ;                      24C +  7M   2b
+        MOVB @CLAMP(R8), R4  ; Clamp[0,4]<<1 | Col  22C +  6M   4b
+        SLA  R4, 4           ;                      20C +  3M   2b
+        SOC  R5, R4          ;                      14C +  4M   2b
+        MOVB R4, *R0+        ;                      20C +  6M   2b
+        DEC  R2              ;                      10C +  3M   2b
+        JNE  SCAN            ;                      10C +  1M   2b
+        B    *R11            ;                                  2b
+                             ;               Total 202C + 51M   28b                 
+SPSCAN  EQU  CODE
+* Routine size: 28 bytes, ~6,720 cycles (8 times per frame)
+
+* This code decodes a frame into wall heights for each column. Called once per
+* frame.
+        EVEN
+DECD    MOV  *R0+, R1        ; Slope                                 2b
+        MOVB *R0+, R2        ; Initial height                        2b
+        MOVB *R0+, @LBR3     ; 7 bits Width low bit Color            4b
+        MOV  R3, R6
+        ANDI R6, 1
+        SWPB R6              ; If light, then R6=>0100, otherwise R6=>0000
+        SRL  R3, 1
+        S    R3, R4          ; How many columns are left after this? 2b
+
+* Notice this loop will always be executed 64 times in total
+        EVEN
+WLP     MOVB R2, R7          ;                      14C + 4M         2b
+        SLA  R7, 1           ;                      14C + 3M         2b
+        A    R6, R7          ;                      14C + 4M         2b
+        MOVB R7, *R15+       ;                      22C + 6M         2b
+        A    R1, R2          ;                      14C + 4M         2b
+        DEC  R3              ;                      10C + 3M         2b
+        JNE  WLP             ;                      10C + 1M         2b
+                             ;
+        MOV  R4, R5          ; Is there another wall?                2b
+        JNE  DECD            ;                                       2b
+        B    *R11            ;                                       2b
+SPDECD  EQU  CODE+DECD-SCAN
+* Routine size: 38 bytes, ~7,500 cycles (once per frame)
+
+* Loop to copy row to nametable
+        EVEN
+VCP     MOVB *R0+, *R12      ;                      24C +  7M   2b
+        MOVB *R0+, *R12      ;                      24C +  7M   2b
+        MOVB *R0+, *R12      ;                      24C +  7M   2b
+        MOVB *R0+, *R12      ;                      24C +  7M   2b        
+        MOVB *R0+, *R12      ;                      24C +  7M   2b        
+        MOVB *R0+, *R12      ;                      24C +  7M   2b        
+        MOVB *R0+, *R12      ;                      24C +  7M   2b        
+        MOVB *R0+, *R12      ;                      24C +  7M   2b
+        DEC  R2              ;                      10C +  3M   2b
+        JNE  VCP             ;                      10C +  1M   2b
+        B    *R11            ;                     848C + 240M  22b
+VEND
+SPVCP   EQU  CODE+VCP-SCAN
+* Routine size: 22 bytes, ~848 cycles (twice per frame)
+
+* Move me to scratch pad /\ /\ /\ ****************************
+
+*********************************************************************
+* VDP RAM Write Register
+* Writes the value in the least-significant byte of Register 0 to the
+* VDP Register indicated in the most-significant byte of Register 0.
+* This is identical in behavior to the VWTR procedure in the E/A
+* cart.
+* Trashes: R0
+*********************************************************************
+        EVEN
+VWTR    ORI  R0,>8000
+        SWPB R0
+        MOVB R0,@VDPWA
+        SWPB R0
+        MOVB R0,@VDPWA
+        NOP
+        RT
+
+        EVEN
+
+STATUSP
+        BCOPY "../../data/STATUSBAR3.TIAP"
+
+STATUSC
+        BCOPY "../../data/STATUSBAR3.TIAC"
+
+WPTR   DATA WALLS
+WALLS
+        END

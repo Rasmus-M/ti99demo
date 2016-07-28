@@ -1,0 +1,354 @@
+       COPY "../../common/HEADER.INC"
+       COPY "../../common/ROUTINES.INC"
+
+SPCHWT EQU  >9400
+SPCHRD EQU  >9000
+
+**
+* VDP Memory Map
+PTRNTB EQU  >0000                      ; Pattern table base
+SPRPTB EQU  >1800                      ; Sprite pattern table
+COLRTB EQU  >2000                      ; Color table base
+NAMETB EQU  >3800                      ; Name table base (8 tables)
+SPRATB EQU  >3B00                      ; Sprite attribute table base
+
+**
+* Scratch pad
+WRKSP  EQU  >8300                      ; Workspace
+R0LB   EQU  WRKSP+1                    ; R0 low byte required for VDP routines
+R1LB   EQU  WRKSP+3
+R2LB   EQU  WRKSP+5
+R3LB   EQU  WRKSP+7
+PLYRWS EQU  >8320                      ; Sound player workspace
+STACK  EQU  >8340                      ; Call stack
+TICK   EQU  STACK+16                   ; Frame counter
+SPOK   EQU  TICK+2                     ; Is speech syth attached?
+SPADDR EQU  SPOK+2                     ; Speech data address
+SPCNTR EQU  SPADDR+2                   ; Speech data counter
+SPSTAT EQU  SPCNTR+2                   ; Speech status byte
+SPREAD EQU  SPSTAT+2                   ; Status read routine
+
+********************************************************************************
+*
+* Main program
+*
+       XORG FXMEM
+
+       DATA   INIT
+       DATA   FRAME
+
+*********************************************************************************
+*
+* Intitialize
+*
+INIT   LI   R10,STACK
+       MOV  R11,*R10+                  ; Push return address onto the stack
+*      Sprite end marker
+       LI   R0,SPRATB
+       LI   R1,>D000
+       BL   @VSBW
+*      Copy bitmap to screen
+       LI   R1,28                      ; Bank / file index that contains pattern table
+       LI   R2,29                      ; Bank / file index that contains color table
+       BL   @BITMAP                    ; Draw image on screen
+*      Copy status read routine to scratchpad
+       LI   R1,SPREAD
+       LI   R2,SPCODE
+       LI   R3,SPCLEN
+CPYPAD MOV  *R2+,*R1+
+       DECT R3
+       JH   CPYPAD
+*      Check for existence of Speech Synthesizer
+       BL   @SPCHCK
+       ABS  @SPOK
+       JEQ  INIT1
+*      Init speech
+       LI   R0,SPEECH
+       MOV  *R0+,@SPCNTR
+       MOV  R0,@SPADDR
+       BL   @SPINIT
+*      Init variables
+INIT1  CLR  @TICK
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// INIT
+
+*********************************************************************************
+*
+* Frame
+*
+FRAME  LI   R10,STACK
+       MOV  R11,*R10+                  ; Push return address onto the stack
+*      Main loop
+       ABS  @SPOK                      ; Check for speech synth
+       JEQ  FRAME1                     ; Skip if not there
+*      Speak
+       MOV  @TICK,R1
+       CI   R1,200
+       JL   FRAME1
+       LI   R0,>0600
+       MOV  R0,@ATTEN
+       BL   @SPEAK
+       MOV  @SPCNTR,R0
+       JNE  FRAME1
+       CLR  @ATTEN
+*      Timing of effect
+FRAME1 INC  @TICK
+       CLR  R0
+       MOV  @TICK,R1
+       CI   R1,900
+       JL   RETURN
+       SETO R0
+*      Return
+RETURN DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// FRAME
+
+*********************************************************************************
+*
+* Send speak external command and first 8 bytes
+*
+SPINIT MOV  R11,*R10+                  ; Push return address onto the stack
+*      Speak external command
+       MOVB @H60,@SPCHWT
+       BL   @DLY12
+*      Send first 8 bytes
+       BL   @SPEAK
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// SPINIT
+
+*********************************************************************************
+*
+* Send up to 8 bytes to the speech synthesizer
+*
+SPEAK  MOV  R11,*R10+                  ; Push return address onto the stack
+*      Check speech status
+       BL   @SPREAD
+       MOVB @SPSTAT,R0
+       COC  @H4000,R0
+       JNE  SPEAK2                     ; Speech buffer not half empty - wait more
+*      Status buffer low
+       MOV  @SPADDR,R1                 ; Get speech data address
+       MOV  @SPCNTR,R2                 ; Get counter
+       JEQ  SPEAK2
+       CI   R2,8                       ; More than 8 bytes left?
+       JLE  SPEAK1
+       LI   R2,8                       ; Yes - send 8
+SPEAK1 MOVB *R1+,@SPCHWT               ; Send a byte
+       DEC  @SPCNTR
+       DEC  R2
+       JNE  SPEAK1
+       MOV  R1,@SPADDR                 ; Save the new address
+*      Return
+SPEAK2 DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// SPEAK
+
+*********************************************************************************
+*
+* Check if the Speech Synthesizer is attached
+*
+SPCHCK MOV  R11,*R10+                  ; Push return address onto the stack
+       CLR  @PHROM                     ; Location 0
+       BL   @LOAD                      ; Load addeess
+       BL   @DLY42
+       MOVB @H10,@SPCHWT
+       BL   @DLY12
+       BL   @SPREAD                    ; Read the byte
+       CB   @SPSTAT,@HAA               ; Is is >AA?
+       JEQ  SPCHC1                     ; Yes. The peripheral is attached
+*      Not there
+       CLR  @SPOK
+       JMP  SPCHC2
+*      There
+SPCHC1 SETO @SPOK
+*      Return
+SPCHC2 DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// SPCHCK
+
+*********************************************************************************
+*
+* Load address
+* Called as BL @LOAD with address in PHROM
+* Uses RO, R1, and R2
+*
+LOAD   MOV  @PHROM,R0
+       LI   R2,4
+LOADLP SRC  R0,4
+       MOV  R0,R1
+       SRC  R1,4
+       ANDI R1,>0F00                   ; Pick off four bits
+       ORI  R1,>4000                   ; Make it >4X
+       MOVB R1,@SPCHWT
+       DEC  R2                         ; Do it four times
+       JNE  LOADLP
+       LI   R1,>4000                   ; Write the >40
+       MOVB R1,@SPCHWT
+       RT
+PHROM  DATA 0                          ; ROM address
+*// LOAD
+
+*********************************************************************************
+*
+* 12 us delay
+*
+DLY12  NOP                             ; Short delay
+       NOP
+       RT
+*// DLY12
+
+*********************************************************************************
+*
+* 42 us delay
+*
+DLY42  LI   R1,10                      ; Long delay after address set up
+DLY42A DEC  R1
+       JNE  DLY42A
+       RT
+*// DLY42
+
+*********************************************************************************
+*
+* Speech status read routine code, must be copied to scratchpad
+*
+SPCODE MOVB @SPCHRD,@SPSTAT
+       NOP
+       NOP
+       NOP
+       RT
+SPCLEN EQU $-SPCODE
+*// SPCODE
+
+**
+* Constants
+H8000  DATA >8000
+H4000  DATA >4000
+H2000  DATA >2000
+H10    BYTE >10
+H60    BYTE >60
+HAA    BYTE >AA
+       EVEN
+
+*********************************************************************************
+*
+* Speech data
+*
+SPEECH
+    DATA 1277
+    BYTE >C8,>6C,>C2,>D5,>D4,>64,>01,>00,>A0,>DC,>98,>0E,>57,>B5
+	BYTE >23,>6A,>BE,>CD,>C9,>36,>B4,>6B,>E4,>4C,>31,>AA,>CA,>AD
+	BYTE >75,>69,>55,>D5,>17,>9E,>36,>85,>31,>13,>6F,>79,>EA,>EC
+	BYTE >CA,>9D,>6B,>D5,>A9,>B2,>EB,>30,>A9,>45,>A7,>CC,>76,>53
+	BYTE >A4,>66,>9F,>22,>B9,>2D,>A1,>9E,>3D,>8A,>68,>36,>05,>E7
+	BYTE >56,>2A,>A2,>5B,>63,>9A,>D1,>AA,>8C,>A9,>91,>3C,>22,>B3
+	BYTE >B1,>FA,>22,>66,>91,>54,>C6,>56,>CF,>D3,>CD,>49,>4B,>7B
+	BYTE >78,>36,>09,>CF,>A3,>C8,>26,>24,>32,>1A,>9E,>32,>85,>50
+	BYTE >F7,>68,>B9,>CA,>94,>DC,>8D,>AC,>F5,>AA,>B2,>35,>4F,>92
+	BYTE >36,>AD,>8E,>D6,>22,>C9,>D2,>84,>C6,>79,>4F,>67,>B5,>AB
+	BYTE >F2,>6C,>54,>32,>44,>71,>09,>B6,>6D,>33,>0F,>47,>01,>98
+	BYTE >DC,>D8,>01,>19,>58,>8C,>A6,>48,>67,>F7,>E8,>B0,>BA,>A2
+	BYTE >9D,>43,>63,>D5,>E8,>8B,>0A,>31,>B5,>8E,>6E,>0C,>D2,>C5
+	BYTE >CD,>5B,>B5,>BE,>D9,>10,>55,>9B,>7D,>FA,>EA,>54,>42,>6B
+	BYTE >F6,>19,>9A,>0D,>32,>8B,>47,>67,>AC,>D6,>38,>A4,>6E,>AD
+	BYTE >A9,>68,>67,>8F,>9C,>19,>80,>02,>D8,>0A,>B0,>95,>69,>01
+	BYTE >8E,>75,>4B,>C0,>51,>AE,>06,>E8,>50,>35,>8D,>99,>85,>65
+	BYTE >8A,>E5,>34,>7A,>6B,>15,>64,>F1,>DB,>10,>AC,>96,>B1,>3B
+	BYTE >5F,>7D,>11,>AA,>95,>62,>E5,>74,>5D,>0B,>79,>57,>C3,>D3
+	BYTE >75,>A7,>A8,>9D,>1D,>4E,>5B,>03,>B3,>45,>2D,>5A,>5D,>51
+	BYTE >2A,>9E,>BE,>6A,>F4,>45,>89,>58,>F9,>6A,>37,>44,>C1,>9E
+	BYTE >95,>93,>C8,>88,>65,>55,>97,>4B,>6A,>CB,>B2,>E9,>6C,>11
+	BYTE >E9,>B4,>4B,>85,>B0,>47,>ED,>D3,>36,>AF,>62,>B6,>55,>4E
+	BYTE >DB,>82,>49,>F8,>54,>3E,>5D,>0D,>6A,>11,>13,>FB,>74,>25
+	BYTE >9A,>BA,>4F,>ED,>D3,>E7,>E0,>66,>6E,>AD,>56,>9F,>AD,>6B
+	BYTE >28,>75,>3E,>43,>76,>A6,>29,>96,>EA,>8C,>C5,>99,>A4,>75
+	BYTE >C3,>33,>17,>63,>9A,>D1,>95,>D7,>92,>A5,>E9,>70,>9B,>2D
+	BYTE >6B,>B0,>56,>4E,>61,>CF,>00,>40,>6E,>04,>60,>50,>91,>02
+	BYTE >6C,>ED,>5E,>80,>A3,>C2,>02,>B0,>59,>B0,>02,>26,>22,>15
+	BYTE >40,>12,>4C,>02,>C8,>11,>45,>00,>31,>A1,>B5,>3A,>77,>8A
+	BYTE >10,>CF,>79,>EA,>32,>D9,>92,>3D,>E7,>A9,>EB,>64,>0D,>89
+	BYTE >5E,>A7,>6E,>43,>38,>A4,>3A,>9E,>BA,>35,>C5,>D0,>5E,>79
+	BYTE >EA,>1E,>0D,>DC,>7B,>D1,>AA,>BB,>11,>C8,>EC,>99,>A7,>3E
+	BYTE >5A,>14,>25,>D3,>14,>60,>BB,>F0,>02,>6C,>1F,>91,>80,>15
+	BYTE >42,>03,>30,>18,>FB,>19,>9A,>31,>F6,>A8,>15,>67,>AC,>DA
+	BYTE >38,>BD,>16,>9C,>A9,>48,>D3,>36,>2D,>3D,>A6,>A4,>2D,>0A
+	BYTE >2D,>5E,>5B,>A2,>96,>0E,>0C,>65,>61,>F1,>46,>DB,>D1,>9D
+	BYTE >9B,>55,>7A,>ED,>C4,>88,>4D,>00,>30,>DB,>15,>A0,>4A,>68
+	BYTE >02,>7C,>0F,>39,>53,>8A,>93,>2A,>B5,>E8,>CC,>D9,>4F,>9A
+	BYTE >C6,>AC,>B3,>14,>DF,>E1,>52,>73,>CE,>52,>63,>9A,>D9,>D4
+	BYTE >3E,>6B,>F5,>CE,>EE,>5D,>FB,>AC,>D5,>0B,>7B,>4C,>E5,>B2
+	BYTE >14,>69,>64,>5E,>8D,>CE,>34,>74,>88,>AA,>B7,>3A,>53,>35
+	BYTE >C6,>66,>B1,>E8,>CC,>55,>05,>59,>C4,>A2,>B5,>34,>E9,>22
+	BYTE >1E,>AB,>03,>90,>81,>44,>02,>26,>25,>4D,>C0,>0D,>E6,>09
+	BYTE >68,>40,>F3,>0C,>59,>97,>BA,>E7,>94,>33,>64,>D3,>EE,>DA
+	BYTE >53,>CE,>90,>7D,>87,>E9,>54,>39,>43,>8E,>ED,>A6,>53,>FB
+	BYTE >0C,>39,>56,>AA,>4D,>ED,>33,>94,>98,>6E,>51,>B5,>CF,>50
+	BYTE >92,>69,>66,>D6,>3E,>63,>AB,>2A,>95,>D9,>F2,>CC,>6D,>18
+	BYTE >96,>47,>C7,>B3,>B4,>A3,>54,>16,>3D,>CF,>5A,>97,>D1,>88
+	BYTE >6D,>5A,>7B,>5D,>46,>C3,>B6,>B9,>ED,>65,>0A,>67,>58,>EF
+	BYTE >71,>94,>C9,>52,>6E,>9D,>18,>10,>12,>0C,>03,>62,>84,>21
+	BYTE >40,>F0,>50,>A2,>AA,>C7,>54,>8B,>6B,>90,>AA,>3D,>37,>0B
+	BYTE >8E,>01,>00,>00,>00,>00,>00,>00,>00,>00,>00,>00,>00,>00
+	BYTE >00,>00,>00,>00,>00,>00,>00,>00,>00,>00,>80,>CC,>26,>54
+	BYTE >4D,>C5,>52,>B0,>96,>C9,>F0,>B2,>58,>25,>DC,>3A,>2B,>22
+	BYTE >65,>97,>A4,>89,>0C,>13,>75,>BC,>F2,>24,>5B,>4C,>27,>F6
+	BYTE >C9,>8B,>0E,>0A,>DF,>BA,>27,>6D,>86,>29,>6D,>AB,>9C,>64
+	BYTE >78,>C2,>8A,>8D,>B2,>92,>E1,>08,>3B,>2E,>CE,>48,>9A,>12
+	BYTE >9C,>B8,>28,>2D,>29,>42,>C4,>7A,>1B,>1F,>F3,>E6,>2C,>73
+	BYTE >B5,>5D,>80,>ED,>DD,>0A,>B0,>9D,>5B,>01,>96,>75,>2F,>C0
+	BYTE >76,>EE,>09,>B8,>5E,>6D,>15,>5B,>B9,>B1,>5B,>E7,>53,>56
+	BYTE >65,>EC,>96,>B3,>4E,>D5,>8C,>B3,>59,>3C,>3C,>4D,>D3,>CE
+	BYTE >AE,>B9,>A8,>74,>45,>1A,>9B,>C5,>4D,>D1,>4B,>6D,>56,>1E
+	BYTE >B1,>09,>00,>7A,>07,>20,>BB,>9B,>74,>25,>A3,>D9,>9A,>6A
+	BYTE >42,>35,>BC,>C9,>69,>8A,>77,>75,>CF,>59,>A7,>A9,>C1,>D5
+	BYTE >7D,>2A,>9F,>A6,>46,>D7,>F0,>AD,>72,>EA,>E6,>C3,>C2,>7A
+	BYTE >CA,>A9,>6B,>8A,>70,>9F,>2A,>A7,>AE,>D9,>C2,>63,>AA,>9C
+	BYTE >BA,>16,>8E,>C8,>89,>32,>EA,>9A,>C9,>CA,>CB,>B4,>18,>B2
+	BYTE >46,>8C,>C8,>48,>02,>88,>82,>54,>00,>91,>93,>11,>00,>BB
+	BYTE >18,>02,>70,>AB,>BD,>F2,>E6,>55,>2A,>36,>F6,>A9,>9B,>53
+	BYTE >CD,>98,>CA,>A7,>ED,>DA,>A5,>7C,>6A,>9D,>BE,>19,>93,>88
+	BYTE >9A,>BC,>86,>62,>C4,>53,>CA,>68,>19,>82,>B1,>4C,>0A,>69
+	BYTE >63,>68,>D2,>29,>A3,>2A,>9F,>B1,>2B,>E3,>8C,>9E,>7C,>A6
+	BYTE >AE,>54,>3A,>A6,>F4,>99,>9A,>54,>69,>6B,>B3,>6D,>4A,>22
+	BYTE >AC,>C9,>AD,>A7,>D9,>BA,>48,>E7,>50,>9E,>E6,>C0,>BD,>3C
+	BYTE >54,>D9,>9A,>4F,>8B,>32,>53,>CA,>67,>DE,>B5,>27,>23,>DC
+	BYTE >9C,>71,>E4,>52,>16,>F1,>73,>FA,>EA,>5D,>CC,>24,>D7,>EA
+	BYTE >A2,>2B,>4D,>D6,>DE,>AB,>0F,>7E,>2C,>58,>7B,>9F,>3E,>E4
+	BYTE >56,>E7,>E8,>79,>86,>E4,>DB,>4C,>3D,>E7,>19,>52,>4A,>09
+	BYTE >C9,>8E,>67,>2C,>36,>39,>34,>7A,>9E,>B9,>46,>A5,>B4,>5C
+	BYTE >79,>96,>16,>0D,>3D,>62,>E1,>58,>AB,>15,>8A,>88,>DB,>61
+	BYTE >49,>42,>25,>3C,>16,>B5,>B9,>A9,>64,>75,>9B,>75,>E6,>EA
+	BYTE >8D,>43,>7A,>D1,>9A,>AB,>73,>56,>8B,>87,>6B,>1E,>52,>85
+	BYTE >23,>1A,>26,>A0,>53,>96,>02,>9C,>68,>51,>80,>1D,>DD,>0B
+	BYTE >B0,>63,>78,>01,>76,>70,>4F,>C0,>54,>22,>01,>F0,>46,>E3
+	BYTE >CC,>CD,>86,>98,>67,>CF,>B3,>54,>17,>9A,>9A,>AD,>CE,>5A
+	BYTE >6D,>5A,>68,>F4,>3C,>5B,>71,>69,>C9,>D9,>71,>6C,>D9,>45
+	BYTE >84,>64,>C7,>B2,>67,>53,>A1,>E6,>1D,>5D,>92,>DC,>04,>BB
+	BYTE >25,>62,>49,>36,>53,>94,>9C,>04,>99,>59,>75,>B0,>8B,>6D
+	BYTE >64,>76,>EA,>AA,>2A,>36,>91,>D9,>85,>B0,>0A,>5B,>02,>00
+	BYTE >00,>00,>00,>00,>00,>00,>00,>00,>00,>00,>00,>00,>00,>00
+	BYTE >00,>80,>07
+
+********************************************************************************
+*
+* VDP Single Byte Write
+*
+* R0: Write address in VDP RAM
+* R1: MSB of R1 sent to VDP RAM
+*
+* R0 is modified, but can be restored with: ANDI R0,>3FFF
+*
+VSBW   MOVB @R0LB,@VDPWA               ; Send low byte of VDP RAM write address
+       ORI  R0,>4000                   ; Set read/write bits 14 and 15 to write (01)
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       MOVB R1,@VDPWD                  ; Write byte to VDP RAM
+       B    *R11
+*// VSBW

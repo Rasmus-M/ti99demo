@@ -1,0 +1,1 @@
+gcc raycaster2.c -g -std=c99 -Wall -lmingw32 -lSDLmain -lSDL -mwindows -o raycaster.exe

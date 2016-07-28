@@ -1,0 +1,18 @@
+*********************************************************************
+* Filename: DEMO3.A99
+* Bank:     5
+* Date:     05/01/2016
+* Author:   orbitaldecay
+* 
+* Contains VGM songs
+*********************************************************************
+
+       COPY "../../common/HEADER.INC"
+       XORG SONGMEM
+       
+* Array of pointers to songs in case we want to store multiple songs in
+* one bank.       
+       DATA LATIN
+
+LATIN  BCOPY "../../data/latin.vgm.30.spf"
+       END

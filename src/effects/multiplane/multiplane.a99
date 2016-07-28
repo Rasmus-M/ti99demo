@@ -1,0 +1,688 @@
+*********************************************************************
+* Filename: metaballs.a99
+* Bank:     14
+* Date:     05/17/2016
+* Author:   orbitaldecay
+* 
+* A multiplane effect. Inspired by https://youtu.be/J9LWF-LiyKc?t=1m39s
+*********************************************************************
+
+       COPY "../../common/HEADER.INC"
+       COPY "../../common/ROUTINES.INC"
+
+FXWP    EQU >8300
+LBR0    EQU FXWP+1
+LBR1    EQU FXWP+3
+LBR2    EQU FXWP+5
+LBR3    EQU FXWP+7
+LBR4    EQU FXWP+9
+LBR5    EQU FXWP+11
+LBR6    EQU FXWP+13
+LBR7    EQU FXWP+15
+LBR8    EQU FXWP+17
+LBR9    EQU FXWP+19
+LBR10   EQU FXWP+21
+LBR11   EQU FXWP+23
+LBR12   EQU FXWP+25
+LBR13   EQU FXWP+27
+LBR14   EQU FXWP+29
+LBR15   EQU FXWP+31
+
+SPPGEN  EQU >8340
+BMSHFT  EQU >B000
+BMSHFT2 EQU >D000
+
+        XORG FXMEM
+
+        DATA INIT
+        DATA FRAME
+       
+INIT
+        MOV  R11, @SAVR11
+        LWPI FXWP
+
+* Initialize standard mode (Graphics I)
+        LI   R0,>0000
+        BL   @VWTR
+        LI   R0,>01A1 ; Screen disabled. Later we write 01E1 to enable.
+        BL   @VWTR
+        LI   R0,>0204 ; Name table starts at >1000
+        BL   @VWTR
+        LI   R0,>03C4 ; Color table starts at >3100
+        BL   @VWTR
+        LI   R0,>0400 ; Pattern table starts at >0000
+        BL   @VWTR
+        LI   R0,>0560 ; Sprite attribute table >3000
+        BL   @VWTR
+        LI   R0,>0607 ; Sprite pattern table at >3800
+        BL   @VWTR
+        LI   R0,>0701 ; Backdrop color is black
+        BL   @VWTR
+        
+* At this point VRAM is organized in the following fashion:
+*
+* Name              Start   End
+* Pattern Table     >0000   >07FF
+* Name Table        >1000   >12FF
+* Sprite Attributes >3000   >30FF
+* Color Table       >3100   >3120
+* Sprite Patterns   >3800   >3FFF (room for 256 8x8 sprites)
+
+* Disable sprites - Added by Asmusr
+        LI   R0, >7000
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, >D000
+        MOVB R0, @VDPWD
+
+* Write nametable
+        LI   R0, >5000
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA   
+        CLR  R1
+        LI   R3, 24
+NTRLP   LI   R2, 8
+NTCLP   MOV  R1, R0
+        MOVB @LBR0, @VDPWD
+        AI   R0, 4
+        MOVB @LBR0, @VDPWD
+        AI   R0, 4
+        MOVB @LBR0, @VDPWD
+        AI   R0, 4
+        MOVB @LBR0, @VDPWD
+        AI   R0, 4
+        DEC  R2
+        JNE  NTCLP
+        INC  R1
+        ANDI R1, 3
+        BL  @PLAYSNG                   ; Added by Asmusr
+        DEC  R3
+        JNE  NTRLP
+        
+* Write color table
+        LI   R0, >7100
+        LI   R1, >1600
+        LI   R2, >0020
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+CTLP    MOVB R1, @VDPWD
+        DEC  R2
+        JNE  CTLP
+
+        
+* Shift bitmap for X offsets and save result
+
+* First copy intitial bitmap to memory at BMSHFT
+        LI   R0, IMAGE1
+        LI   R1, BMSHFT
+        LI   R2, 128
+CPBM    MOV  *R0+, *R1+
+        DEC  R2
+        JNE  CPBM
+        LI   R0, BMSHFT
+        BL   @PATSHFT
+
+* First copy intitial bitmap to memory at BMSHFT
+        LI   R0, IMAGE2
+        LI   R1, BMSHFT2
+        LI   R2, 128
+CPBM2   MOV  *R0+, *R1+
+        DEC  R2
+        JNE  CPBM2
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LI   R0, BMSHFT2
+        BL   @PATSHFT
+        
+        
+        LI   R0,>01E1 ; Enable screen
+        BL   @VWTR
+        
+        MOV @SAVR11, R11
+        RT
+        
+PATSHFT
+        MOV  R11, @PR11
+* Then start shifting loop, shift each successive copy 1 bit to the right and
+* wrapping around
+        LI   R2, 31
+SHFTLP  MOV  R0, R3
+        MOV  R0, R4
+        AI   R4, 128
+        MOV  R0, R7
+        AI   R7, 256
+        MOV  R0, R8
+        AI   R8, 256+128
+        LI   R15, 96
+        LI   R14, 4
+
+COLLP   MOV  R0, R5
+        MOV  R0, R6
+        A    R15, R5
+        A    R15, R6
+        AI   R6, 128
+
+; R3 = Current pos bitmask, R4 = Current pos bitmap
+; R5 = Left pos bitmask, R6 = Left pos bitmap
+; R7 = Dest bitmask, R8 = Dest bitmap
+
+        LI   R13, 32
+ROWLP   
+* Bitmask
+        MOVB *R3+, R10
+        SRL  R10, 1
+        MOVB *R5+, R11
+        SLA  R11, 7
+        ANDI R11, >8000
+        SOC  R10, R11
+        MOVB R11, *R7+
+
+* Bitmap
+        MOVB *R4+, R10
+        SRL  R10, 1
+        MOVB *R6+, R11
+        SLA  R11, 7
+        ANDI R11, >8000
+        SOC  R10, R11
+        MOVB R11, *R8+
+        
+        DEC  R13
+        JNE  ROWLP
+        
+        AI   R15, 32
+        ANDI R15, 127
+        DEC  R14
+        JNE  COLLP
+        
+        AI   R0, 256
+        BL  @PLAYSNG                   ; Added by Asmusr
+        DEC  R2
+        JNE  SHFTLP
+
+* Copy pattern generator to scratch pad ram
+        LI   R0, PGEN
+        LI   R1, SPPGEN
+        LI   R2, PEND-PGEN
+PLP     MOVB *R0+, *R1+
+        DEC  R2
+        JNE  PLP
+        MOV  @PR11, R11
+        B    *R11
+
+PR11    DATA >0000
+
+FRAME   MOV  R11, @SAVR11
+        MOV  R3, @SAVR3
+        LWPI FXWP
+
+        MOV  @SAVR3, R3
+STAGE1  CI   R3, 300
+        JGT  STAGE2
+        
+        MOV  @T3, R9
+        INCT R9
+        ANDI R9, 511
+        MOV  R9, @T3
+
+        MOV  @T1, R10
+        INCT R10
+        ANDI R10, 511
+        MOV  R10, @T1
+        
+        MOV  @T2, R11
+        INCT R11
+        ANDI R11, 511
+        MOV  R11, @T2
+                
+        MOV  @XOFF(R11), R6
+        MOV  R6, R3
+        SWPB R3
+        AI   R3, BMSHFT2
+        
+        MOV  @XOFF(R10), R4
+        MOV  R4, R2
+        SWPB R2
+        AI   R2, BMSHFT2
+        
+        MOV  @XOFF(R9), R4
+        SWPB R4
+        AI   R4, BMSHFT2
+        
+        MOV  @YOFF(R10), R15
+        MOV  @YOFF(R11), R12
+        MOV  @YOFF(R9), R10
+        B    @DRAW
+        
+STAGE2  CI   R3, 900
+        JGT  STAGE3
+        
+        MOV  @T3, R9
+        INC  R9
+        ANDI R9, 511
+        MOV  R9, @T3
+
+        MOV  @T1, R10
+        INCT R10
+        ANDI R10, 511
+        MOV  R10, @T1
+        
+        MOV  @T2, R11
+        INCT R11
+        ANDI R11, 511
+        MOV  R11, @T2
+                
+        MOV  @XOFF(R11), R6
+        MOV  R6, R3
+        SWPB R3
+        AI   R3, BMSHFT2
+        
+        MOV  @XOFF(R10), R4
+        MOV  R4, R2
+        SWPB R2
+        AI   R2, BMSHFT2
+        
+        MOV  @XOFF(R9), R4
+        SWPB R4
+        AI   R4, BMSHFT2
+        
+        MOV  @YOFF(R10), R15
+        MOV  @YOFF(R11), R12
+        MOV  @YOFF(R9), R10
+        B    @DRAW
+STAGE3  CI   R3, 1500
+        JGT  STAGE4
+        
+        MOV  @T3, R9
+        INC  R9
+        ANDI R9, 511
+        MOV  R9, @T3
+
+        MOV  @T1, R10
+        INCT R10
+        ANDI R10, 511
+        MOV  R10, @T1
+        
+        MOV  @T2, R11
+        INCT R11
+        INC  R11
+        ANDI R11, 511
+        MOV  R11, @T2
+                
+        MOV  @XOFF(R11), R6
+        MOV  R6, R3
+        SWPB R3
+        AI   R3, BMSHFT
+        
+        MOV  @XOFF(R10), R4
+        MOV  R4, R2
+        SWPB R2
+        AI   R2, BMSHFT2
+        
+        MOV  @XOFF(R9), R4
+        SWPB R4
+        AI   R4, BMSHFT2
+        
+        MOV  @YOFF(R10), R15
+        MOV  @YOFF(R11), R12
+        MOV  @YOFF(R9), R10
+        JMP  DRAW
+        
+STAGE4
+* Blank a random entry in the nametable. This is a linear congruential generator
+* with cycle 768 (i.e. it visits every number between 0 and 767 inclusive 
+* exactly once)
+        LI   R0, 27061
+        MPY  @SEED, R0
+        INC  R1
+        LI   R2, 768
+        DIV  R2, R0         ; Remainder is in R1
+        MOV  R1, @SEED
+        AI   R1, >5000
+        MOVB @LBR1, @VDPWA
+        MOV  R1, @VDPWA
+        LI   R1, 16
+        MOVB @LBR1, @VDPWD
+
+* Do it twice
+        LI   R0, 27061
+        MPY  @SEED, R0
+        INC  R1
+        LI   R2, 768
+        DIV  R2, R0         ; Remainder is in R1
+        MOV  R1, @SEED
+        AI   R1, >5000
+        MOVB @LBR1, @VDPWA
+        MOV  R1, @VDPWA
+        LI   R1, 16
+        MOVB @LBR1, @VDPWD
+        
+        MOV  @T3, R9
+        INC  R9
+        ANDI R9, 511
+        MOV  R9, @T3
+
+        MOV  @T1, R10
+        INCT R10
+        ANDI R10, 511
+        MOV  R10, @T1
+        
+        MOV  @T2, R11
+        INCT R11
+        INC  R11
+        ANDI R11, 511
+        MOV  R11, @T2
+                
+        MOV  @XOFF(R11), R6
+        MOV  R6, R3
+        SWPB R3
+        AI   R3, BMSHFT
+        
+        MOV  @XOFF(R10), R4
+        MOV  R4, R2
+        SWPB R2
+        AI   R2, BMSHFT2
+        
+        MOV  @XOFF(R9), R4
+        SWPB R4
+        AI   R4, BMSHFT2
+        
+        MOV  @YOFF(R10), R15
+        MOV  @YOFF(R11), R12
+        MOV  @YOFF(R9), R10
+
+DRAW
+        MOV  @PTAB, R0
+        LI   R1, >0800
+        XOR  R1, R0 
+        MOV  R0, @PTAB
+        ORI  R0, >4000
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R5, VDPWD
+
+        BL   @SPPGEN
+
+* Write black pattern
+        LI   R0, >FF00
+        MOVB R0, *R5
+        MOVB R0, *R5
+        MOVB R0, *R5
+        MOVB R0, *R5
+        MOVB R0, *R5
+        MOVB R0, *R5
+        MOVB R0, *R5
+        MOVB R0, *R5
+        
+        MOV  @PTAB, R0
+        SRL  R0, 11
+        ORI  R0, >0400
+        BL   @VWTR
+        
+        LWPI CTRLWP
+        MOV  @SAVR3, R3
+        CI   R3, 1885
+        JGT  BAIL
+        CLR  R0
+        JMP  RETURN
+BAIL
+        SETO R0
+RETURN
+        MOV @SAVR11, R11
+        RT
+        
+SAVR3   DATA >0000
+SAVR11  DATA >0000
+
+T1      DATA >0000
+T2      DATA >0000
+T3      DATA >0000
+
+PTAB    DATA >0000
+SEED    DATA 69
+
+*** Copy me to scratchpad \/ \/ \/ *********************************************
+PGEN
+        MOV  R11, @PGR11
+        LI   R13, 4
+COL     LI   R14, 32
+ROW     
+        CLR  R0
+
+        MOV  R4, R1
+        A    R10, R1
+        AI   R1, 128
+        SZCB *R1, R0
+        AI   R1, -128
+        SOCB *R1, R0
+        
+        MOV  R2, R1
+        A    R15, R1        
+        SZCB *R1, R0
+        AI    R1, 128
+        SOCB *R1, R0
+
+        MOV  R3, R1
+        A    R12, R1
+        SZCB *R1, R0
+        AI   R1, 128
+        SOCB *R1, R0
+        
+        MOVB R0, *R5
+        
+        INC  R15
+        ANDI R15, 31
+        INC  R12
+        ANDI R12, 31
+        INC  R10
+        ANDI R10, 31
+        DEC  R14
+        JNE  ROW
+        AI   R2, 32
+        AI   R3, 32
+        AI   R4, 32
+        
+        LWPI CTRLWP
+        BL   @PLAYSNG
+        LWPI FXWP
+        
+        DEC  R13
+        JNE  COL
+        MOV  @PGR11, R11
+        B    *R11
+
+PGR11   DATA >0000
+        
+PEND
+*** Copy me to scratchpad /\ /\ /\ *********************************************
+
+*********************************************************************
+* VDP RAM Write Register
+* Writes the value in the least-significant byte of Register 0 to the
+* VDP Register indicated in the most-significant byte of Register 0.
+* This is identical in behavior to the VWTR procedure in the E/A
+* cart.
+* Trashes: R0
+*********************************************************************
+        EVEN
+VWTR    ORI  R0,>8000
+        SWPB R0
+        MOVB R0,@VDPWA
+        SWPB R0
+        MOVB R0,@VDPWA
+        NOP
+        RT
+
+*********************************************************************
+* VDP RAM Multibyte Write
+* Writes the array at Register 1 to the VDP RAM location in Register
+* 0. Writes Register 2 bytes.
+* Trashes: R0, R1, R2
+*********************************************************************
+        EVEN
+VMBW    SWPB R0
+        MOVB R0,@VDPWA
+        SWPB R0
+        ORI  R0,>4000
+        MOVB R0,@VDPWA
+MBWLP   MOVB *R1+,@VDPWD
+        DEC  R2
+        JNE  MBWLP
+        RT
+
+* . . . . . . x .       . x . . . . . .         . . . . . . . .         . . . . . . . . 
+* . . . . . . x .       . x . . . . . .         . . . . . . . .         x x . . . . . . 
+* . . . . x x . .       . . x x . . . .         . . . . . . . .         . . x x . . . . 
+* . . . x . . . .       . . . . x . . .         . . . . . . . .         . . . . x . . . 
+* . . x . . . . .       . . . . . x . .         . . . . . . . .         . . . . . x . . 
+* . . x . . . . .       . . . . . x . .         . . . . . . . .         . . . . . x . . 
+* x x . . . . . .       . . . . . . x x         x x x x x x x x         . . . . . . x . 
+* . . . . . . . .       . . . . . . . .         . . . . . . . .         . . . . . . x . 
+
+* . . . . . . . .       . . . . . . . .         . . . . . . . .         . . . . . . x . 
+* x x . . . . . .       . . . . . . x x         x x x x x x x x         . . . . . . x . 
+* . . x . . . . .       . . . . . x . .         . . . . . . . .         . . . . . x . . 
+* . . x . . . . .       . . . . . x . .         . . . . . . . .         . . . . . x . . 
+* . . . x . . . .       . . . . x . . .         . . . . . . . .         . . . . x . . . 
+* . . . . x x . .       . . x x . . . .         . . . . . . . .         . . x x . . . . 
+* . . . . . . x .       . x . . . . . .         . . . . . . . .         x x . . . . . . 
+* . . . . . . x .       . x . . . . . .         . . . . . . . .         . . . . . . . . 
+
+* . . . . . . x .       . x . . . . . .         . . . . . . . .         . . . . . . . . 
+* . . . . . . x .       . x . . . . . .         . . . . . . x x         x x . . . . . . 
+* . . . . . . x .       . x . . . . . .         . . . . x x . .         . . x x . . . . 
+* . . . . . . x .       . x . . . . . .         . . . x . . . .         . . . . x . . . 
+* . . . . . . x .       . x . . . . . .         . . x . . . . .         . . . . . x . . 
+* . . . . . . x .       . x . . . . . .         . . x . . . . .         . . . . . x . . 
+* . . . . . . x .       . x . . . . . .         . x . . . . . .         . . . . . . x . 
+* . . . . . . x .       . x . . . . . .         . x . . . . . .         . . . . . . x . 
+
+* Notice we're storing column wise
+        
+IMAGE1
+* Bitmask
+
+        BYTE >FF, >80, >80, >80, >80, >80, >80, >80
+        BYTE >80, >80, >80, >80, >80, >80, >80, >80
+        BYTE >80, >80, >80, >80, >80, >80, >80, >80
+        BYTE >80, >80, >80, >80, >80, >80, >80, >FF
+        
+        BYTE >FF, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >FF
+
+        BYTE >FF, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >FF
+
+        BYTE >FF, >01, >01, >01, >01, >01, >01, >01 
+        BYTE >01, >01, >01, >01, >01, >01, >01, >01 
+        BYTE >01, >01, >01, >01, >01, >01, >01, >01 
+        BYTE >01, >01, >01, >01, >01, >01, >01, >FF 
+
+* Bitmap
+
+        BYTE >00, >7F, >40, >40, >40, >40, >40, >40
+        BYTE >40, >40, >40, >40, >40, >40, >40, >40
+        BYTE >40, >40, >40, >40, >40, >40, >40, >40
+        BYTE >40, >40, >40, >40, >40, >40, >7F, >00
+        
+        BYTE >00, >FF, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >FF, >00
+
+        BYTE >00, >FF, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >FF, >00
+
+        BYTE >00, >FE, >02, >02, >02, >02, >02, >02
+        BYTE >02, >02, >02, >02, >02, >02, >02, >02
+        BYTE >02, >02, >02, >02, >02, >02, >02, >02
+        BYTE >02, >02, >02, >02, >02, >02, >FE, >00
+
+IMAGE2
+* Bitmask
+        BYTE >00, >00, >03, >0F, >1F, >1F, >3F, >3F
+        BYTE >3F, >3F, >1F, >1F, >0F, >03, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+
+        BYTE >00, >00, >C0, >F0, >F8, >F8, >FC, >FC
+        BYTE >FC, >FC, >F8, >F8, >F0, >C0, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        
+* Bitmap
+        BYTE >00, >03, >0C, >10, >20, >20, >40, >40
+        BYTE >40, >40, >20, >20, >10, >0C, >03, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+
+        BYTE >00, >C0, >30, >08, >04, >04, >02, >02
+        BYTE >02, >02, >04, >04, >08, >30, >C0, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+        BYTE >00, >00, >00, >00, >00, >00, >00, >00
+
+        
+* . . . . . . . .       . . . . . . . .         . . . . . . . .         . . . . . . . . 
+* . . . . . . . .       . . . . . . . .         . . . . . . . .         . . . . . . . . 
+* . . . . . . . .       . . . . . . . .         . . . . . . . .         . . . . . . . . 
+* . . . . . . . .       . . . . . . . .         . . . . . . . .         . . . . . . . . 
+* . . . . . . . .       . . . . x x x x         x x x x . . . .         . . . . . . . . 
+* . . . . . . . .       . . x x . . . .         . . . . x x . .         . . . . . . . . 
+* . . . . . . . .       x x . . . . . .         . . . . . . x x         . . . . . . . . 
+* . . . . . . . x       . . . . . . . .         . . . . . . . .         x . . . . . . . 
+
+* . . . . . . x .       . . . . . . . .         . . . . . . . .         . x . . . . . . 
+* . . . . . . x .       . . . . . . . .         . . . . . . . .         . x . . . . . . 
+* . . . . . x . .       . . . . . . . .         . . . . . . . .         . . x . . . . . 
+* . . . . . x . .       . . . . . . . .         . . . . . . . .         . . x . . . . . 
+* . . . . x . . .       . . . . . . . .         . . . . . . . .         . . . x . . . . 
+* . . . . x . . .       . . . . . . . .         . . . . . . . .         . . . x . . . . 
+* . . . . x . . .       . . . . . . . .         . . . . . . . .         . . . x . . . . 
+* . . . . x . . .       . . . . . . . .         . . . . . . . .         . . . x . . . . 
+
+* . . . . x . . .       . . . . . . . .         . . . . . . . .         . . . x . . . . 
+* . . . . x . . .       . . . . . . . .         . . . . . . . .         . . . x . . . . 
+* . . . . x . . .       . . . . . . . .         . . . . . . . .         . . . x . . . . 
+* . . . . x . . .       . . . . . . . .         . . . . . . . .         . . . x . . . . 
+* . . . . . x . .       . . . . . . . .         . . . . . . . .         . . x . . . . . 
+* . . . . . x . .       . . . . . . . .         . . . . . . . .         . . x . . . . . 
+* . . . . . . x .       . . . . . . . .         . . . . . . . .         . x . . . . . . 
+* . . . . . . x .       . . . . . . . .         . . . . . . . .         . x . . . . . . 
+
+* . . . . . . . x       . . . . . . . .         . . . . . . . .         x . . . . . . . 
+* . . . . . . . .       x x . . . . . .         . . . . . . x x         . . . . . . . . 
+* . . . . . . . .       . . x x . . . .         . . . . x x . .         . . . . . . . . 
+* . . . . . . . .       . . . . x x x x         x x x x . . . .         . . . . . . . . 
+* . . . . . . . .       . . . . . . . .         . . . . . . . .         . . . . . . . . 
+* . . . . . . . .       . . . . . . . .         . . . . . . . .         . . . . . . . . 
+* . . . . . . . .       . . . . . . . .         . . . . . . . .         . . . . . . . . 
+* . . . . . . . .       . . . . . . . .         . . . . . . . .         . . . . . . . . 
+
+        COPY "lissajou.a99"
+
+        END
+

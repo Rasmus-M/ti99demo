@@ -1,0 +1,12 @@
+*********************************************************************
+* Filename: lenac.a99
+* Bank:     2
+* Date:     05/01/2016
+* Author:   orbitaldecay
+* 
+* Contains color table for Lena
+*********************************************************************
+
+       COPY "../../common/HEADER.INC"
+       BCOPY "../../data/LENA.TIAC"
+       END

@@ -1,0 +1,12 @@
+*********************************************************************
+* Filename: lenap.a99
+* Bank:     1
+* Date:     05/01/2016
+* Author:   orbitaldecay
+* 
+* Contains pattern table for Lena
+*********************************************************************
+
+       COPY "../../common/HEADER.INC"
+       BCOPY "../../data/LENA.TIAP"
+       END
