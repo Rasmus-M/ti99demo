@@ -759,8 +759,6 @@ WPBU    DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
 *********************************************************************
        EVEN
 SCNLST
-       DATA >0010, >0500  ; Bank 16: Checkerboard zoom                 Mode 1
-
        DATA >001E, >0500  ; Bank 30: Don't mess with Texas (image)     Mode 2
        DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
        DATA >0019, >0500  ; Bank 25: Spinning box animation (decoder)  Mode 2 hybrid
@@ -772,7 +770,7 @@ SCNLST
 
        DATA >000E, >0500  ; Bank 14: Multiplane                        Mode 1
        DATA >0009, >0501  ; Bank 9: Metaballs                          Mode 1
-       DATA >0008, >0501  ; Bank 8: Square tunnel                      Mode 1
+*      DATA >0008, >0501  ; Bank 8: Square tunnel                      Mode 1
        DATA >0006, >0501  ; Bank 6: Raycaster                          Mode 2
        DATA >0003, >0500  ; Bank 3: Dot fx                             Mode 2 hybrid
        DATA >0004, >0500  ; Bank 4: Lena image                         Mode 2
