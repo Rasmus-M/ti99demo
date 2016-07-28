@@ -38,7 +38,7 @@ python tools\xdt99\xas99.py -b -R -o .\src\bin\demo32 .\src\effects\music\songba
 rem Create disk
 rem The order these appear in this list determines the bank index, so always add
 rem to the end of the list!
-del demo.dsk
+if exist demo.dsk (del demo.dsk)
 python tools\xdt99\xdm99.py demo.dsk --initialize 720 -n DEMO
 python tools\xdt99\xdm99.py demo.dsk -a ^
     .\src\bin\demo0 ^
