@@ -197,7 +197,6 @@ MEMLP  MOV  *R0+,*R1+
 *      SAMS
        MOV  R4,@LRR4
        MOV  R5,@LRR5
-       BL   @AMSENA                    ; Enable SAMS
        MOV  R1,R3                      ; Save destination
        MOV  R2,R4                      ; Save length
        SLA  R0,1                       ; 2 banks per file
@@ -207,6 +206,7 @@ MEMLP  MOV  *R0+,*R1+
 *      First bank
        LI   R1,>3000                   ; Memory segment to map into
        BL   @AMSMAP                    ; Map 4K to >3000->3FFF
+       BL   @AMSENA                    ; Enable SAMS
        MOV  R3,R0                      ; Destination
        LI   R1,>3000                   ; Source
        CI   R2,>1000                   ; Check length
@@ -216,6 +216,7 @@ LDTOR1 MOVB *R1+,*R0+                  ; Copy to RAM
        BL   @PLAYSNG
        DEC  R2
        JNE  LDTOR1
+       BL   @AMSDIS                    ; Disable SAMS
 *      Second bank
        CI   R4,>1000                   ; Check length
        JLE  LDTOR2
@@ -223,6 +224,7 @@ LDTOR1 MOVB *R1+,*R0+                  ; Copy to RAM
        AI   R0,>0100                   ; Next bank
        LI   R1,>3000                   ; Memory segment to map into
        BL   @AMSMAP                    ; Map 4K to >3000->3FFF
+       BL   @AMSENA                    ; Enable SAMS
        MOV  R3,R0                      ; Destination
        AI   R0,>1000                   ; Add 4K offset
        LI   R1,>3000                   ; Source
@@ -232,8 +234,8 @@ LDTOR3 MOVB *R1+,*R0+                  ; Copy to RAM
        BL   @PLAYSNG
        DEC  R2
        JNE  LDTOR3
-LDTOR2 BL   @AMSDIS                    ; Disable SAMS
-       MOV  @LRR4,R4
+       BL   @AMSDIS                    ; Disable SAMS
+LDTOR2 MOV  @LRR4,R4
        MOV  @LRR5,R5
 *      End SAMS
 
@@ -320,7 +322,6 @@ LDTOVDP
 *      SAMS
        MOV  R4,@LVR4
        MOV  R5,@LVR5
-       BL   @AMSENA                    ; Enable SAMS
        MOV  R1,R3                      ; Save destination
        MOV  R2,R4                      ; Save length
        SLA  R0,1                       ; 2 banks per file
@@ -330,12 +331,14 @@ LDTOVDP
 *      First bank
        LI   R1,>3000                   ; Memory segment to map into
        BL   @AMSMAP                    ; Map 4K to >3000->3FFF
+       BL   @AMSENA                    ; Enable SAMS
        MOV  R3,R0                      ; Destination
        LI   R1,>3000                   ; Source
        CI   R2,>1000                   ; Check length
        JLE  LDTOV1
        LI   R2,>1000                   ; Truncate length to 4K
 LDTOV1 BL   @VMBW                      ; Copy to VDP
+       BL   @AMSDIS                    ; Disable SAMS
 *      Second bank
        CI   R4,>1000                   ; Check length
        JLE  LDTOV2
@@ -343,14 +346,15 @@ LDTOV1 BL   @VMBW                      ; Copy to VDP
        AI   R0,>0100                   ; Next bank
        LI   R1,>3000                   ; Memory segment to map into
        BL   @AMSMAP                    ; Map 4K to >3000->3FFF
+       BL   @AMSENA                    ; Enable SAMS
        MOV  R3,R0                      ; Destination
        AI   R0,>1000                   ; Add 4K offset
        LI   R1,>3000                   ; Source
        MOV  R4,R2                      ; Get length
        AI   R2,->1000                  ; Already done 4K
        BL   @VMBW                      ; Copy to VDP
-LDTOV2 BL   @AMSDIS                    ; Disable SAMS
-       MOV  @LVR4,R4
+       BL   @AMSDIS                    ; Disable SAMS
+LDTOV2 MOV  @LVR4,R4
        MOV  @LVR5,R5
 *      End SAMS
        .else
@@ -827,6 +831,7 @@ MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
 * Load all files to SAMS
        .ifdef SAMS
 FCOUNT EQU  33                         ; Number of files to load
+*      JMP  SAMSOK
        BL   @AMSDTC
        CI   R0,512
        JHE  SAMSOK
@@ -844,10 +849,8 @@ WTQUIT LI   R13,>0000       ; keyboard column 0
        ANDI R14,>1100       ; test quit
        JNE  WTQUIT
        B    @QUIT
-*      Enable SAMS
-SAMSOK BL   @AMSENA
 *      Init
-       CLR  R7                         ; Current index
+SAMSOK CLR  R7                         ; Current index
        LI   R0,>1000
        MOV  R0,@LDADDR                 ; Set the load address
 *      Display text
@@ -892,11 +895,15 @@ LDSAMS CLR  R1
        AI   R0,>0100
        LI   R1,>B000
        BL   @AMSMAP
+*      Enable SAMS
+       BL   @AMSENA
 *      Copy file from VDP RAM to AMS banks
        LI   R0,>1000
        LI   R1,>A000
        LI   R2,>2000
        BL   @VMBR
+*      Disable SAMS
+       BL   @AMSDIS
 *      Next file
        INC  R7
        CI   R7,FCOUNT
@@ -908,8 +915,7 @@ LDSAMS CLR  R1
        LI   R0,>0B00
        LI   R1,>B000
        BL   @AMSMAP
-*      Disable SAMS
-       BL   @AMSDIS
+*      Skip data
        JMP  INIT
 LDTEXT TEXT "LOADING FILE 00 OF "
        BYTE (FCOUNT/10)+48
