@@ -244,7 +244,7 @@ LDTOR2 BL   @AMSDIS                    ; Disable SAMS
        
 * Save destination RAM address in R3 to use later
        MOV  R1,R3
-* Load from file to VDP R0 = file index, R1 = >2000 (VDP dest),
+* Load from file to VDP R0 = file index, R1 = >0000 (VDP dest),
 * R2 = # bytes to copy
        CLR  R1
        BL   @LDTOVDP
@@ -687,6 +687,65 @@ FSAVR11 DATA >0000
 
 ***************************************************************************
 *
+* Detect AMS
+* Banks FF=1024K, 7F=512K, 3F=256K, 1F=128K
+*
+* On return R0 contains the size in KB, which is also stored in AMSSIZ
+*
+* This routine is writing:
+* >FF to the first byte of bank >FF (for testing 1024K)
+* >7F to the first byte of bank >7F (for testing 512K)
+* >3F to the first byte of bank >3F (for testing 256K)
+* >1F to the first byte of bank >1F (for testing 128K)
+*
+AMSBUF EQU  >3000
+*
+AMSDTC MOV  R11,@AMSR11                ; Save return address
+*      Write bank numbers to banks
+       LI   R2,4                       ; Number of banks to test
+       LI   R0,>FF00                   ; Start with AMS bank number 255
+AMSDT1 LI   R1,AMSBUF                  ; Map to >3000->3FFF
+       BL   @AMSMAP                    ; Set mapping
+       BL   @AMSENA                    ; Enable AMS
+       MOVB R0,@AMSBUF                 ; Write bank number to bank
+       BL   @AMSDIS                    ; Disable AMS
+       SRL  R0,1                       ; Next bank to test
+       DEC  R2
+       JNE  AMSDT1
+       CLR  @AMSBUF                    ; Clear ordinary RAM >3000
+*      Check bank numbers
+       LI   R2,4                       ; Number of banks to test
+       LI   R0,>1FFF                   ; Start with last bank in 128K segment
+AMSDT2 LI   R1,AMSBUF                  ; Map to >3000->3FFF
+       BL   @AMSMAP                    ; Set mapping
+       BL   @AMSENA                    ; Enable AMS
+       CB   R0,@AMSBUF                 ; Check that bank contains bank number
+       JNE  AMSDT3                     ; No - stop
+       BL   @AMSDIS                    ; Disable AMS
+       SLA  R0,1                       ; Next bank to test
+       DEC  R2
+       JNE  AMSDT2
+*      Passed all
+       LI   R0,>0100                   ; Passed all - report 256 banks
+       JMP  AMSDT4
+*      Failed
+AMSDT3 SRL  R0,1                       ; Revert to last bank that passed
+       ANDI R0,>FF00
+       SWPB R0                         ; Swap bank number to LSB
+       INC  R0                         ; Number of banks is one higher
+       ANDI R0,>01E0
+AMSDT4 SLA  R0,2                       ; Convert to KB
+       MOV  R0,@AMSSIZ                 ; Save number of banks
+       BL   @AMSDIS                    ; Disable AMS
+*      Return
+       MOV  @AMSR11,R11                ; Restore return address
+       B    *R11
+AMSR11 DATA 0
+AMSSIZ DATA 0                          ; Number of detected AMS banks
+*// AMSDTC
+
+***************************************************************************
+*
 * Map an AMS bank to a given memory segment
 *
 * R0 MSB contains the AMS bank number to map
@@ -768,8 +827,25 @@ MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
 * Load all files to SAMS
        .ifdef SAMS
 FCOUNT EQU  33                         ; Number of files to load
+       BL   @AMSDTC
+       CI   R0,512
+       JHE  SAMSOK
+*      Display text
+       LI   R0,32*11+3
+       LI   R1,NOSAMS
+       LI   R2,26
+       BL   @VMBW
+*      Wait for quit
+WTQUIT LI   R13,>0000       ; keyboard column 0
+       LI   R12,>0024       ; CRU address of the decoder
+       LDCR R13,3           ; select the column
+       LI   R12,>0006       ; address of the first row
+       STCR R14,8           ; read 8 rows
+       ANDI R14,>1100       ; test quit
+       JNE  WTQUIT
+       B    @QUIT
 *      Enable SAMS
-       BL   @AMSENA
+SAMSOK BL   @AMSENA
 *      Init
        CLR  R7                         ; Current index
        LI   R0,>1000
@@ -838,6 +914,7 @@ LDSAMS CLR  R1
 LDTEXT TEXT "LOADING FILE 00 OF "
        BYTE (FCOUNT/10)+48
        BYTE (FCOUNT%10)+48
+NOSAMS TEXT "512KB SAMS MEMORY REQUIRED"
 TEN    DATA 10
        .endif
 
