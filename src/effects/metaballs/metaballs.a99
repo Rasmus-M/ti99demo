@@ -170,9 +170,9 @@ FRAME
         ANDI R15, >00FF
         MOV  R15, @POS+6
         
-* Bail after 600 ticks (10 seconds)
+* Bail after 1200 ticks (20 seconds)
         LWPI CTRLWP
-        CI   R3, 600
+        CI   R3, 1200
         JGT  BAIL
         CLR  R0
         JMP  RETURN
