@@ -140,10 +140,10 @@ BMR11  DATA >0000
 *********************************************************************
 * Load To CPU RAM
 * If we're building a cartridge, this function switches to the bank
-* specified in Register 1 (0=BANK0, 1=BANK1) and copies R2 bytes to
-* the RAM at the address specified in Register 0. If we're loading
-* from disk, it copies the entire file specified in Register 1
-* (0=DEMOA, 1=DEMOB) to the RAM address in Register 0.
+* specified in Register 0 (0=BANK0, 1=BANK1) and copies R2 bytes to
+* the RAM at the address specified in Register 1. If we're loading
+* from disk, it copies the entire file specified in Register 0
+* (0=DEMOA, 1=DEMOB) to the RAM address in Register 1.
 *
 * 1. NOTICE THAT THIS TRASHES THE DATA IN THE VDP!!!
 * 2. DO NOT CALL THIS UNLESS YOU'VE SET LWPI >8300
@@ -177,6 +177,50 @@ MEMLP  MOV  *R0+,*R1+
        
        .else
 
+       .ifdef SAMS
+*      SAMS
+       MOV  R4,@LRR4
+       MOV  R5,@LRR5
+       BL   @AMSENA                    ; Enable SAMS
+       MOV  R1,R3                      ; Save destination
+       MOV  R2,R4                      ; Save length
+       SLA  R0,1                       ; 2 banks per file
+       AI   R0,16                      ; Start at bank 16
+       SWPB R0                         ; To MSB
+       MOV  R0,R5                      ; Save bank number
+*      First bank
+       LI   R1,>3000                   ; Memory segment to map into
+       BL   @AMSMAP                    ; Map 4K to >3000->3FFF
+       MOV  R3,R0                      ; Destination
+       LI   R1,>3000                   ; Source
+       CI   R2,>1000                   ; Check length
+       JLE  LDTOR1
+       LI   R2,>1000                   ; Truncate length to 4K
+LDTOR1 MOVB *R1+,*R0+                  ; Copy to RAM
+       DEC  R2
+       JNE  LDTOR1
+*      Second bank
+       CI   R4,>1000                   ; Check length
+       JLE  LDTOR2
+       MOV  R5,R0                      ; Restore bank number
+       AI   R0,>0100                   ; Next bank
+       LI   R1,>3000                   ; Memory segment to map into
+       BL   @AMSMAP                    ; Map 4K to >3000->3FFF
+       MOV  R3,R0                      ; Destination
+       AI   R0,>1000                   ; Add 4K offset
+       LI   R1,>3000                   ; Source
+       MOV  R4,R2                      ; Get length
+       AI   R2,->1000                  ; Already done 4K
+LDTOR3 MOVB *R1+,*R0+                  ; Copy to RAM
+       DEC  R2
+       JNE  LDTOR3
+LDTOR2 BL   @AMSDIS                    ; Disable SAMS
+       MOV  @LRR4,R4
+       MOV  @LRR5,R5
+*      End SAMS
+
+       .else
+
 * Load file from disk with index R0 (e.g. DEMOA, DEMOB, etc.) to address
 * in RAM of R1 (copy R2 bytes). NOTE: This trashes VRAM!!!
        
@@ -193,6 +237,8 @@ MEMLP  MOV  *R0+,*R1+
        
        .endif
 
+       .endif
+
 * Restore the variables we modified
        MOV  @LRR0,R0
        MOV  @LRR1,R1
@@ -206,15 +252,26 @@ LRR0   DATA >0000
 LRR1   DATA >0000
 LRR2   DATA >0000
 LRR3   DATA >0000
+       .ifdef SAMS
+LRR4   DATA >0000
+LRR5   DATA >0000
+       .endif
 LRR11  DATA >0000
+
+* Insert some space to align SAMS and DISK versions
+       .ifndef CARTRIDGE
+       .ifndef SAMS
+       BSS  >62
+       .endif
+       .endif
 
 *********************************************************************
 * Load To VDP RAM
 * If we're building a cartridge, this function switches to the bank
-* specified in Register 1 (0=BANK0, 1=BANK1) and copies R2 bytes to
-* the VDP at the address specified in Register 0. If we're loading
-* from disk, it copies the entire file specified in Register 1
-* (0=DEMOA, 1=DEMOB) to the VDP address in Register 0.
+* specified in Register 0 (0=BANK0, 1=BANK1) and copies R2 bytes to
+* the VDP at the address specified in Register 1. If we're loading
+* from disk, it copies the entire file specified in Register 0
+* (0=DEMOA, 1=DEMOB) to the VDP address in Register 1.
 *
 * DO NOT CALL THIS UNLESS YOU'VE SET LWPI >8300!!
 *
@@ -246,6 +303,45 @@ LDTOVDP
        LI   R1, START ; Source in R0 (bytes to copy in R2)
        BL   @VMBW
        
+       .else
+
+       .ifdef SAMS
+*      SAMS
+       MOV  R4,@LVR4
+       MOV  R5,@LVR5
+       BL   @AMSENA                    ; Enable SAMS
+       MOV  R1,R3                      ; Save destination
+       MOV  R2,R4                      ; Save length
+       SLA  R0,1                       ; 2 banks per file
+       AI   R0,16                      ; Start at bank 16
+       SWPB R0                         ; To MSB
+       MOV  R0,R5                      ; Save bank number
+*      First bank
+       LI   R1,>3000                   ; Memory segment to map into
+       BL   @AMSMAP                    ; Map 4K to >3000->3FFF
+       MOV  R3,R0                      ; Destination
+       LI   R1,>3000                   ; Source
+       CI   R2,>1000                   ; Check length
+       JLE  LDTOV1
+       LI   R2,>1000                   ; Truncate length to 4K
+LDTOV1 BL   @VMBW                      ; Copy to VDP
+*      Second bank
+       CI   R4,>1000                   ; Check length
+       JLE  LDTOV2
+       MOV  R5,R0                      ; Restore bank number
+       AI   R0,>0100                   ; Next bank
+       LI   R1,>3000                   ; Memory segment to map into
+       BL   @AMSMAP                    ; Map 4K to >3000->3FFF
+       MOV  R3,R0                      ; Destination
+       AI   R0,>1000                   ; Add 4K offset
+       LI   R1,>3000                   ; Source
+       MOV  R4,R2                      ; Get length
+       AI   R2,->1000                  ; Already done 4K
+       BL   @VMBW                      ; Copy to VDP
+LDTOV2 BL   @AMSDIS                    ; Disable SAMS
+       MOV  @LVR4,R4
+       MOV  @LVR5,R5
+*      End SAMS
        .else
 
 * Load file from disk with index R0 (e.g. DEMOA, DEMOB, etc.) to address
@@ -300,6 +396,8 @@ ML     MOVB  *R1+, @>8400
        BL    @PLAYSNG
 * Restore song pointer and resume playing
        .endif
+
+       .endif
        
 * Restore all the variables we modified
        MOV  @LVR0,R0
@@ -314,6 +412,10 @@ LVR0   DATA >0000
 LVR1   DATA >0000
 LVR2   DATA >0000
 LVR3   DATA >0000
+       .ifdef SAMS
+LVR4   DATA >0000
+LVR5   DATA >0000
+       .endif
 LVR11  DATA >0000
 
 * RDFILE
@@ -489,6 +591,11 @@ MBRLP  MOVB @VDPRD, *R1+
        RT
 MBRS11 DATA >0000
 
+* Insert some space to align SAMS and DISK versions
+       .ifdef SAMS
+       BSS  >12
+       .endif
+
 *********************************************************************
 * Play Song
 * Plays the currently loaded song in a loop. If @VDPINT is zero on exit,
@@ -550,23 +657,23 @@ SAVR11 DATA >0000
 * R0: Max number of open files
 ********************************************************************************
        .ifndef CARTRIDGE
-FILES   MOV  R11,@FSAVR11        * Push return address onto the stack
-	    MOV	 R0,@NFILES          * Save #files argument
-	    LI   R0,PAB
+FILES   MOV  R11,@FSAVR11              ; Push return address onto the stack
+        MOV  R0,@NFILES                ; Save #files argument
+        LI   R0,PAB
         LI   R1,PDATA
         LI   R2,2
-        BL	 @VMBW               * Copy 2 bytes from PDATA (RAM) to PAB (VRAM)
-	    LI   R0,PAB
-        MOV  R0,@>8356           * Point to subroutine in DSR
-        MOVB @NFILES+1,@>834C    * #files argument for subroutine 016h
-        BLWP @DSRLNK             * Call DSR with subprogram option
+        BL   @VMBW                     ; Copy 2 bytes from PDATA (RAM) to PAB (VRAM)
+        LI   R0,PAB
+        MOV  R0,@>8356                 ; Point to subroutine in DSR
+        MOVB @NFILES+1,@>834C          ; #files argument for subroutine 016h
+        BLWP @DSRLNK                   ; Call DSR with subprogram option
         DATA 10
-*	    Return
-	    MOV  @FSAVR11,R11
-	    B	*R11
+*       Return
+        MOV  @FSAVR11,R11
+        B    *R11
 
-NFILES  DATA >0001               * Number of simultaneous files
-PDATA   DATA >0116               * DSR subprogram to run (FILES)
+NFILES  DATA >0001                     ; Number of simultaneous files
+PDATA   DATA >0116                     ; DSR subprogram to run (FILES)
 FSAVR11 DATA >0000
 
 * Disk access routines
@@ -577,6 +684,46 @@ FSAVR11 DATA >0000
 * Copy player code
        COPY "tiplayer30hz.a99"
        
+       .ifdef SAMS
+
+***************************************************************************
+*
+* Map an AMS bank to a given memory segment
+*
+* R0 MSB contains the AMS bank number to map
+* R1 contains the memory segment to map into (>2000, >3000, >A000, ...)
+*
+* Call AMSMP1 if R1 contains the register number (>0002, >0003, >000A, ...) instead
+*
+AMSMAP SRL  R1,12                      ; Top 4 bits select register
+AMSMP1 SLA  R1,1                       ; Registers are 2 bytes apart
+       LI   R12,>1E00                  ; AMS CRU address
+       SBO  0                          ; Enable access to AMS mapping registers
+       MOVB R0,@>4000(R1)              ; Write register
+       SBZ  0                          ; Disable access to AMS mapping registers
+       B    *R11                       ; Return
+*// AMSMAP
+
+***************************************************************************
+*
+* Enable AMS
+*
+AMSENA LI   R12,>1E00                  ; AMS CRU address
+       SBO  1                          ; Enable AMS mapper
+       B    *R11                       ; Return
+*// AMSENA
+
+***************************************************************************
+*
+* Disable AMS
+*
+AMSDIS LI   R12,>1E00                  ; AMS CRU address
+       SBZ  1                          ; Disable AMS mapper
+       B    *R11                       ; Return
+*// AMSDIS
+
+       .endif
+
 *********************************************************************
 * DO NOT CHANGE ANYTHING ABOVE HERE WITHOUT UPDATING THE HARDCODED
 * FUNCTION POINTERS IN .\SRC\COMMON\ROUTINES.INC!
@@ -618,6 +765,58 @@ MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
        LI   R1,STATE0
        BL   @SAVEST
        
+* Load all files to SAMS
+       .ifdef SAMS
+*      Enable SAMS
+       BL   @AMSENA
+*      Init
+       CLR  R7                         ; Current index
+*      Update the file name we're loading
+LDSAMS MOV   R7,R0                     ; Get index
+       AI    R0,65                     ; R0 + 'A'
+       SWPB  R0
+       MOVB  R0,@FNAME+4
+*      Copy PAB data into VDP RAM
+       LI    R0,PAB
+       LI    R1,PABDAT
+       LI    R2,PABDTE-PABDAT
+       BL    @VMBW
+*      Load file
+       LI    R0,PAB+9                  ; Pointer to name length
+       MOV   R0,@FNPNTR                ; Store in >8356
+       BLWP  @DSRLNK                   ; Open file
+       DATA  8
+*      Map SAMS banks to >A000->BFFF
+       MOV  R7,R0
+       SLA  R0,1
+       AI   R0,16
+       SWPB R0
+       LI   R1,>A000
+       BL   @AMSMAP
+       AI   R0,>0100
+       LI   R1,>B000
+       BL   @AMSMAP
+*      Copy file from VDP RAM to AMS banks
+       CLR  R0
+       LI   R1,>A000
+       LI   R2,>2000
+       BL   @VMBR
+*      Next file
+       INC  R7
+       CI   R7,33
+       JNE  LDSAMS
+*      Map >A000->BFFF back to normal
+       LI   R0,>0A00
+       LI   R1,>A000
+       BL   @AMSMAP
+       LI   R0,>0B00
+       LI   R1,>B000
+       BL   @AMSMAP
+*      Disable SAMS
+       BL   @AMSDIS
+       .endif
+
+* Initialize main variables
        LI   R6,SCNLST       ; Scene list pointer
        CLR  R7              ; Current song bank/index
        CLR  R8              ;

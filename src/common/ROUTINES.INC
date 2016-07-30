@@ -26,7 +26,11 @@
        .ifdef CARTRIDGE
 BITMAP  EQU     >201A
        .else
+       .ifdef SAMS
 BITMAP  EQU     >201A
+       .else
+BITMAP  EQU     >201A
+       .endif
        .endif
 
 *********************************************************************
@@ -51,7 +55,11 @@ BITMAP  EQU     >201A
        .ifdef CARTRIDGE
 LDTORAM EQU     >20DE
        .else
+       .ifdef SAMS
 LDTORAM EQU     >20DE
+       .else
+LDTORAM EQU     >20DE
+       .endif
        .endif
 
 *********************************************************************
@@ -75,7 +83,11 @@ LDTORAM EQU     >20DE
        .ifdef CARTRIDGE
 LDTOVDP EQU     >212C
        .else
-LDTOVDP EQU     >2126
+       .ifdef SAMS
+LDTOVDP EQU     >2188
+       .else
+LDTOVDP EQU     >2188
+       .endif
        .endif
 
 *********************************************************************
@@ -84,13 +96,21 @@ LDTOVDP EQU     >2126
 * Plays the currently loaded song in a loop. Will only play when the
 * VDP interrupt has been triggered. On return @VDPINT will be -1 if
 * an interrupt has occurred and 0 if an interrupt has not occurred.
+* ATTEN is used to set the attenuation of the music player
+* (in MSB, >0000 - >0F00)
 *********************************************************************
        .ifdef CARTRIDGE
-PLAYSNG EQU     >22B2
+PLAYSNG EQU     >22B2   ; Address in controller.lst + >1FE0
 VDPINT  EQU     >230A
 ATTEN   EQU     >2388
        .else
-PLAYSNG EQU     >231A
-VDPINT  EQU     >2372
-ATTEN   EQU     >24E2
+       .ifdef SAMS
+PLAYSNG EQU     >237C   ; Address in controller.lst + >2000
+VDPINT  EQU     >23D4
+ATTEN   EQU     >2544
+       .else
+PLAYSNG EQU     >237C   ; Address in controller.lst + >2000
+VDPINT  EQU     >23D4
+ATTEN   EQU     >2544
+       .endif
        .endif
