@@ -36,7 +36,23 @@ CPLP   MOV *R0+,*R1+
 
 * Begin control code
        XORG $-START+>2000
-       
+
+* Routine jump block
+       B    @BITMAP
+       B    @LDTORAM
+       B    @LDTOVDP
+       B    @PLAYSNG
+
+* Externally referenced variables
+VDPINT DATA >0000
+
+* Copy player code
+       COPY "tiplayer30hz.a99"
+
+* Disk access routines
+       COPY "dsrlnk.a99"
+       COPY "gpllnk.a99"
+
 *********************************************************************
 * Draw Bitmap
 * Switches to graphics mode II and draws a full screen bitmap.
@@ -197,6 +213,7 @@ MEMLP  MOV  *R0+,*R1+
        JLE  LDTOR1
        LI   R2,>1000                   ; Truncate length to 4K
 LDTOR1 MOVB *R1+,*R0+                  ; Copy to RAM
+       BL   @PLAYSNG
        DEC  R2
        JNE  LDTOR1
 *      Second bank
@@ -212,6 +229,7 @@ LDTOR1 MOVB *R1+,*R0+                  ; Copy to RAM
        MOV  R4,R2                      ; Get length
        AI   R2,->1000                  ; Already done 4K
 LDTOR3 MOVB *R1+,*R0+                  ; Copy to RAM
+       BL   @PLAYSNG
        DEC  R2
        JNE  LDTOR3
 LDTOR2 BL   @AMSDIS                    ; Disable SAMS
@@ -257,13 +275,6 @@ LRR4   DATA >0000
 LRR5   DATA >0000
        .endif
 LRR11  DATA >0000
-
-* Insert some space to align SAMS and DISK versions
-       .ifndef CARTRIDGE
-       .ifndef SAMS
-       BSS  >62
-       .endif
-       .endif
 
 *********************************************************************
 * Load To VDP RAM
@@ -591,11 +602,6 @@ MBRLP  MOVB @VDPRD, *R1+
        RT
 MBRS11 DATA >0000
 
-* Insert some space to align SAMS and DISK versions
-       .ifdef SAMS
-       BSS  >12
-       .endif
-
 *********************************************************************
 * Play Song
 * Plays the currently loaded song in a loop. If @VDPINT is zero on exit,
@@ -646,7 +652,6 @@ BYE2
 
 TIME   DATA >0000
 CURSNG DATA >0000
-VDPINT DATA >0000
 SAVR12 DATA >0000
 SAVR1  DATA >0000
 SAVR2  DATA >0000
@@ -676,13 +681,7 @@ NFILES  DATA >0001                     ; Number of simultaneous files
 PDATA   DATA >0116                     ; DSR subprogram to run (FILES)
 FSAVR11 DATA >0000
 
-* Disk access routines
-       COPY "gpllnk.a99"
-       COPY "dsrlnk.a99"
        .endif
-       
-* Copy player code
-       COPY "tiplayer30hz.a99"
        
        .ifdef SAMS
 
@@ -727,6 +726,7 @@ AMSDIS LI   R12,>1E00                  ; AMS CRU address
 *********************************************************************
 * DO NOT CHANGE ANYTHING ABOVE HERE WITHOUT UPDATING THE HARDCODED
 * FUNCTION POINTERS IN .\SRC\COMMON\ROUTINES.INC!
+* Asmusr 30 July 2016: Should not be required to update pointers any longer.
 *********************************************************************
 
 *********************************************************************
@@ -767,12 +767,32 @@ MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
        
 * Load all files to SAMS
        .ifdef SAMS
+FCOUNT EQU  33                         ; Number of files to load
 *      Enable SAMS
        BL   @AMSENA
 *      Init
        CLR  R7                         ; Current index
+       LI   R0,>1000
+       MOV  R0,@LDADDR                 ; Set the load address
+*      Display text
+       LI   R0,32*11+5
+       LI   R1,LDTEXT
+       LI   R2,21
+       BL   @VMBW
+*      Display file index
+LDSAMS CLR  R1
+       MOV  R7,R2
+       INC  R2
+       DIV  @TEN,R1
+       AI   R1,48
+       SWPB R1
+       LI   R0,32*11+18
+       BL   @VSBW
+       AI   R2,48
+       SWPB R2
+       MOVB R2,@VDPWD
 *      Update the file name we're loading
-LDSAMS MOV   R7,R0                     ; Get index
+       MOV   R7,R0                     ; Get index
        AI    R0,65                     ; R0 + 'A'
        SWPB  R0
        MOVB  R0,@FNAME+4
@@ -797,13 +817,13 @@ LDSAMS MOV   R7,R0                     ; Get index
        LI   R1,>B000
        BL   @AMSMAP
 *      Copy file from VDP RAM to AMS banks
-       CLR  R0
+       LI   R0,>1000
        LI   R1,>A000
        LI   R2,>2000
        BL   @VMBR
 *      Next file
        INC  R7
-       CI   R7,33
+       CI   R7,FCOUNT
        JNE  LDSAMS
 *      Map >A000->BFFF back to normal
        LI   R0,>0A00
@@ -814,10 +834,15 @@ LDSAMS MOV   R7,R0                     ; Get index
        BL   @AMSMAP
 *      Disable SAMS
        BL   @AMSDIS
+       JMP  INIT
+LDTEXT TEXT "LOADING FILE 00 OF "
+       BYTE (FCOUNT/10)+48
+       BYTE (FCOUNT%10)+48
+TEN    DATA 10
        .endif
 
 * Initialize main variables
-       LI   R6,SCNLST       ; Scene list pointer
+INIT   LI   R6,SCNLST       ; Scene list pointer
        CLR  R7              ; Current song bank/index
        CLR  R8              ;
 

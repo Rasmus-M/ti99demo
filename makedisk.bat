@@ -75,3 +75,5 @@ python tools\xdt99\xdm99.py demo.dsk -a ^
     .\src\bin\demo31_0000 ^
     .\src\bin\demo32_0000 ^
     -n DEMOA
+
+call makesams.bat

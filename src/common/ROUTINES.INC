@@ -1,5 +1,5 @@
 *********************************************************************
-* Filename: HEADER.INC
+* Filename: ROUTINES.INC
 * Date:     05/04/2016
 * Author:   orbitaldecay
 *
@@ -20,18 +20,10 @@
 *
 *      LI   R1, 1
 *      LI   R2, 2
-*      BLWP @BITMAP
+*      BL   @BITMAP
 *
 *********************************************************************
-       .ifdef CARTRIDGE
 BITMAP  EQU     >201A
-       .else
-       .ifdef SAMS
-BITMAP  EQU     >201A
-       .else
-BITMAP  EQU     >201A
-       .endif
-       .endif
 
 *********************************************************************
 * Load To CPU RAM
@@ -52,15 +44,7 @@ BITMAP  EQU     >201A
 *       BL  @LDTOVDP
 *
 *********************************************************************
-       .ifdef CARTRIDGE
-LDTORAM EQU     >20DE
-       .else
-       .ifdef SAMS
-LDTORAM EQU     >20DE
-       .else
-LDTORAM EQU     >20DE
-       .endif
-       .endif
+LDTORAM EQU     BITMAP+4
 
 *********************************************************************
 * Load To VDP RAM
@@ -80,15 +64,7 @@ LDTORAM EQU     >20DE
 *       BL  @LDTOVDP
 *
 *********************************************************************
-       .ifdef CARTRIDGE
-LDTOVDP EQU     >212C
-       .else
-       .ifdef SAMS
-LDTOVDP EQU     >2188
-       .else
-LDTOVDP EQU     >2188
-       .endif
-       .endif
+LDTOVDP EQU     LDTORAM+4
 
 *********************************************************************
 * Play Song
@@ -99,18 +75,6 @@ LDTOVDP EQU     >2188
 * ATTEN is used to set the attenuation of the music player
 * (in MSB, >0000 - >0F00)
 *********************************************************************
-       .ifdef CARTRIDGE
-PLAYSNG EQU     >22B2   ; Address in controller.lst + >1FE0
-VDPINT  EQU     >230A
-ATTEN   EQU     >2388
-       .else
-       .ifdef SAMS
-PLAYSNG EQU     >237C   ; Address in controller.lst + >2000
-VDPINT  EQU     >23D4
-ATTEN   EQU     >2544
-       .else
-PLAYSNG EQU     >237C   ; Address in controller.lst + >2000
-VDPINT  EQU     >23D4
-ATTEN   EQU     >2544
-       .endif
-       .endif
+PLAYSNG EQU     LDTOVDP+4
+VDPINT  EQU     PLAYSNG+4
+ATTEN   EQU     >20A0
