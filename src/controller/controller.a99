@@ -831,8 +831,7 @@ MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
 * Load all files to SAMS
        .ifdef SAMS
 FCOUNT EQU  33                         ; Number of files to load
-*      JMP  SAMSOK
-
+*      Set SAMS registers to standard values
        CLR  R0
        CLR  R3
        LI   R2,16
@@ -842,11 +841,11 @@ INIAMS MOV  R3,R1
        AI   R3,>1000
        DEC  R2
        JNE  INIAMS
-
+*      Detect SAMS
        BL   @AMSDTC
        CI   R0,512
        JHE  SAMSOK
-*      Display text
+*      Display error text
        LI   R0,32*11+3
        LI   R1,NOSAMS
        LI   R2,26
