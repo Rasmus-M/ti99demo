@@ -114,7 +114,7 @@ LOOP1  MOV  @TICK,R0
        INC  @TICK
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,300
+       CI   R1,200
        JL   RETURN
        SETO R0
 *      Return
