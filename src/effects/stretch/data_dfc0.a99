@@ -1,0 +1,3 @@
+       COPY "../../common/HEADER.INC"
+       BCOPY "data_dfc0.bin"
+       END

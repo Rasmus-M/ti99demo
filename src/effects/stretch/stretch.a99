@@ -1,0 +1,395 @@
+*********************************************************************
+*
+* Stretching color bar screen
+* For the TI-99/4A home computer
+*
+* August 2016
+*
+* Rasmus Moustgaard <rasmus.moustgaard@gmail.com>
+*
+*********************************************************************
+
+       COPY "../../common/HEADER.INC"
+       COPY "../../common/ROUTINES.INC"
+
+**
+* VDP memory map
+PTRNTB EQU  >0000                      ; Pattern table base
+SPRPTB EQU  >1800                      ; Sprite pattern table base
+COLRTB EQU  >2000                      ; Color table base
+NAMETB EQU  >2800                      ; Name table base
+SPRATB EQU  >2B00                      ; Sprite attribute table base
+NAMET2 EQU  >2C00                      ; Name table base 2
+
+**
+* Scratch pad
+WRKSP  EQU  >8300                      ; Workspace
+R0LB   EQU  WRKSP+1                    ; R0 low byte required for VDP routines
+R1LB   EQU  WRKSP+3
+R2LB   EQU  WRKSP+5
+R3LB   EQU  WRKSP+7
+R4LB   EQU  WRKSP+9
+R5LB   EQU  WRKSP+11
+R6LB   EQU  WRKSP+13
+R7LB   EQU  WRKSP+15
+PLYRWS EQU  >8320                      ; Sound player workspace
+STACK  EQU  PLYRWS+32                  ; Subroutine stack
+TICK   EQU  STACK+8                    ; Frame counter
+SCRPTR EQU  TICK+2                     ; Screen pointer
+DSCRN  EQU  SCRPTR+2
+
+********************************************************************************
+*
+* Main program
+*
+       XORG FXMEM
+
+       DATA INIT
+       DATA FRAME
+
+*********************************************************************************
+*
+* Initialize
+*
+INIT   LI   R10,STACK
+       MOV  R11,*R10+                  ; Push return address onto the stack
+*      Load data
+       LI   R0,34                      ; Bank / file index in R0
+       LI   R1,>BFE0                   ; Destination in R1
+       LI   R2,>1FE0                   ; Number of bytes to copy in R2
+       BL   @LDTORAM
+       LI   R0,35                      ; Bank / file index in R0
+       LI   R1,>DFC0                   ; Destination in R1
+       LI   R2,>1000                   ; Number of bytes to copy in R2
+       BL   @LDTORAM
+*      Mode
+       BL   @GMODE
+       CLR  @TICK
+       LI   R0,SCRINI
+       MOV  R0,@SCRPTR
+       LI   R0,2
+       MOV  R0,@DSCRN
+*      Screen on
+       LI   R0,>01E2
+       BL   @VWTR
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// INIT
+
+*********************************************************************************
+*
+* Draw frame
+*
+FRAME  LI   R10,STACK
+       MOV  R11,*R10+                  ; Push return address onto the stack
+*      Set name table
+       MOV  @TICK,R0
+       ANDI R0,1
+       ORI  R0,>020A
+       BL   @VWTR
+*      Init
+       MOV  @TICK,R4
+       INV  R4
+       ANDI R4,1                       ; Double buffer (0 or 1)
+       MOV  @SCRPTR,R5
+       MOV  *R5,R5
+*      Colors
+       MOV  R4,R0
+       SLA  R0,10
+       AI   R0,COLRTB
+       BL   @VWAD
+       LI   R0,VDPWD
+       MOV  @SCRCOL(R5),R1
+       MOV  @SCRCHR(R5),R2
+FRAME1 MOVB *R1+,R3
+       MOVB R3,*R0
+       MOVB R3,*R0
+       MOVB R3,*R0
+       MOVB R3,*R0
+       MOVB R3,*R0
+       MOVB R3,*R0
+       MOVB R3,*R0
+       MOVB R3,*R0
+       COC  @VDPW7,R3
+       JNE  FRAME4
+       BL   @PLAYSNG
+FRAME4 DEC  R2
+       JNE  FRAME1
+*      Patterns
+       MOV  R4,R0
+       SLA  R0,10
+       AI   R0,PTRNTB
+       MOV  @SCRPAT(R5),R1
+       MOV  @SCRCHR(R5),R2
+       SLA  R2,3
+       BL   @VDPCP
+*      Name table
+       MOV  R4,R0
+       SLA  R0,10
+       AI   R0,NAMETB
+       BL   @VWAD
+       LI   R0,VDPWD
+       MOV  @SCRMAP(R5),R1
+       SRC  R4,1
+*      Run length decode map
+       CLR	R2
+RLDCB1 MOVB	*R1+,R3				* Get source byte
+	   JLT	RLDCB2				* If msb is set it's a run
+	   SOC  R4,R3
+	   MOVB	R3,*R0				* Otherwise output single byte
+	   JMP	RLDCB1
+RLDCB2 MOVB	*R1+,R2				* Get run counter
+	   SWPB	R2					* Swap to LSB
+	   JEQ	RLDCBE				* A run of zero marks the end
+	   INC	R2					* Otherwise output n+1 bytes
+	   ANDI	R3,>7F00			* Clear msb
+	   SOC  R4,R3
+RLDCB3 MOVB	R3,*R0				* Output run byte
+	   DEC	R2
+	   JNE	RLDCB3				* Run loop
+       BL   @PLAYSNG
+	   JMP	RLDCB1
+*      Next screen
+RLDCBE MOV  @TICK,R0
+       CI   R0,32
+       JL   FRAME3
+       A    @DSCRN,@SCRPTR
+       MOV  @SCRPTR,R0
+       CI   R0,SCRNS
+       JHE  FRAME2
+       LI   R0,SCRNS
+       MOV  R0,@SCRPTR
+       NEG  @DSCRN
+       JMP  FRAME3
+FRAME2 CI   R0,SCRNSE
+       JL   FRAME3
+       LI   R0,SCRNSE-2
+       MOV  R0,@SCRPTR
+       NEG  @DSCRN
+*      Check for finish
+FRAME3 INC  @TICK
+       CLR  R0
+       MOV  @TICK,R1
+       CI   R1,128+32
+       JL   RETURN
+       SETO R0
+*      Return
+RETURN DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// FRAME
+
+*********************************************************************************
+*
+* Set graphics mode
+*
+GMODE  MOV  R11,*R10+                  ; Push return address onto the stack
+       CLR  R0
+       LI   R1,VREGS
+       LI   R2,8
+GMODE1 MOVB *R1+,@R0LB
+       BL   @VWTR                      ; Set register
+       AI   R0,>0100
+       DEC  R2
+       JNE  GMODE1
+*      Clear patterns
+       LI   R0,PTRNTB
+       CLR  R1
+       LI   R2,>800
+       BL   @VDPWR
+*      Clear colors
+       LI   R0,COLRTB
+       CLR  R1
+       LI   R2,>800
+       BL   @VDPWR
+*      Clear name table
+       LI   R0,NAMETB
+       CLR  R1
+       LI   R2,>300
+       BL   @VDPWR
+*      Disable sprites
+       LI   R0,SPRATB
+       LI   R1,>D000
+       BL   @VSBW
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*      VDP registers
+VREGS  BYTE >02                        ; Graphics II mode
+       BYTE >A2                        ; 16K, display off, interrupt enabled
+       BYTE >0A                        ; NAMETB = >2800
+       BYTE >9F                        ; COLRTB = >2000, >800 bytes
+       BYTE >00                        ; PTRNTB = >0000, >800 bytes
+       BYTE >56                        ; SPRATB = >2B00
+       BYTE >03                        ; SPRPTB = >1800
+       BYTE >07                        ; Backdrop color
+*// GMODE
+
+********************************************************************************
+*
+* VDP Set Write Address
+*
+* R0: Address to set VDP address counter to
+*
+VWAD   MOVB @R0LB,@VDPWA               ; Send low byte of VDP RAM write address
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       ANDI R0,>3FFF                   ; Restore R0 top two MSbits
+       B    *R11
+*// VWAD
+
+********************************************************************************
+*
+* VDP Single Byte Write
+*
+* R0: Write address in VDP RAM
+* R1: MSB of R1 sent to VDP RAM
+*
+* R0 is modified, but can be restored with: ANDI R0,>3FFF
+*
+VSBW   MOVB @R0LB,@VDPWA               ; Send low byte of VDP RAM write address
+       ORI  R0,>4000                   ; Set read/write bits 14 and 15 to write (01)
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       MOVB R1,@VDPWD                  ; Write byte to VDP RAM
+       B    *R11
+*// VSBW
+
+********************************************************************************
+*
+* VDP Write To Register
+*
+* R0 MSB: VDP register to write to
+* R0 LSB: Value to write
+*
+VWTR   MOVB @R0LB,@VDPWA               ; Send low byte (value) to write to VDP register
+       ORI  R0,>8000                   ; Set up a VDP register write operation (10)
+       MOVB R0,@VDPWA                  ; Send high byte (address) of VDP register
+       B    *R11
+*// VWTR
+
+*********************************************************************
+*
+* Fast CPU to VDP copy, replaces VMBW
+*
+* R0: Destination address
+* R1: Source address
+* R2: Number of bytes to copy
+*
+VDPCP  MOV  R11,*R10+                  ; Push return address onto the stack
+       SWPB R0
+       MOVB R0,@VDPWA                  ; Send low byte of VDP RAM write address
+       SWPB R0
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       LI   R0,VDPWD
+       MOV  R2,R3
+       SRL  R3,3                       ; Number of groups of 8
+       JEQ  VDPC2
+VDPC1  MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       COC  @VDPC7,R3
+       JNE  VDPC4
+       BL   @PLAYSNG
+VDPC4  DEC  R3
+       JNE  VDPC1
+       ANDI R2,>0007                   ; Isolate number of remaining bytes
+       JEQ  VDPC3
+VDPC2  MOVB *R1+,*R0
+       DEC  R2
+       JNE  VDPC2
+*      Return
+VDPC3  DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+VDPC7  DATA >0007
+*// VDPCP
+
+*********************************************************************
+*
+* Fast CPU to VDP write, replaces VSMW
+*
+* R0: Destination address
+* R1: Byte to write in MSB
+* R2: Number of bytes to copy
+*
+VDPWR  MOV  R11,*R10+                  ; Push return address onto the stack
+       SWPB R0
+       MOVB R0,@VDPWA                  ; Send low byte of VDP RAM write address
+       SWPB R0
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       LI   R0,VDPWD
+       MOV  R2,R3
+       SRL  R3,3                       ; Number of groups of 8
+       JEQ  VDPW2
+VDPW1  MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       COC  @VDPW7,R3
+       JNE  VDPW4
+       BL   @PLAYSNG
+VDPW4  DEC  R3
+       JNE  VDPW1
+       ANDI R2,>0007                   ; Isolate number of remaining bytes
+       JEQ  VDPW3
+VDPW2  MOVB R1,*R0
+       DEC  R2
+       JNE  VDPW2
+*      Return
+VDPW3  DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+VDPW7  DATA >0007
+*// VDPWR
+
+********************************************************************************
+*
+* Screens
+*
+
+* Structure
+SCRCHR EQU  0
+SCRCOL EQU  2
+SCRPAT EQU  4
+SCRMAP EQU  6
+
+SCRNS  DATA >A500
+       DATA >A7B8
+       DATA >AB82
+       DATA >AFBA
+       DATA >B434
+SCRINI DATA >B914
+       DATA >BBF4
+       DATA >C156
+       DATA >C6CA
+       DATA >CC9C
+       DATA >D220
+       DATA >D654
+       DATA >DBC8
+       DATA >E196
+       DATA >E6FE
+       DATA >EC9E
+
+SCRNSE
+
+********************************************************************************
+*
+* Include files
+*
+       BSS >500-$-CARTSP
+       BCOPY "data_a500.bin"
+

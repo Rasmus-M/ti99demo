@@ -1076,6 +1076,7 @@ WPBU    DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
 *********************************************************************
        EVEN
 SCNLST
+       DATA >0021, >0500  ; Bank 33: Stretch                           Mode 2 hybrid
        DATA >001E, >0500  ; Bank 30: Don't mess with Texas (image)     Mode 2
        DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
        DATA >0019, >0500  ; Bank 25: Spinning box animation (decoder)  Mode 2 hybrid

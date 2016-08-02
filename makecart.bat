@@ -32,6 +32,9 @@ python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo29 --base 0x6000
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo30 --base 0x6000 .\src\effects\title\title.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo31 --base 0x6000 .\src\effects\credits\credits.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo32 --base 0x6000 .\src\effects\music\songbank2.a99
+python tools\xdt99\xas99.py -b -R -L stretch.lst -D CARTRIDGE -o .\src\bin\demo33 --base 0x6000 .\src\effects\stretch\stretch.a99
+python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo34 --base 0x6000 .\src\effects\stretch\data_bfe0.a99
+python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo35 --base 0x6000 .\src\effects\stretch\data_dfc0.a99
 
 rem Pad to 8192 bytes (size of 1 bank)
 tools\pad .\src\bin\demo0_6000 .\src\bin\demo0.bin 8192
@@ -67,6 +70,9 @@ tools\pad .\src\bin\demo29_6000 .\src\bin\demo29.bin 8192
 tools\pad .\src\bin\demo30_6000 .\src\bin\demo30.bin 8192
 tools\pad .\src\bin\demo31_6000 .\src\bin\demo31.bin 8192
 tools\pad .\src\bin\demo32_6000 .\src\bin\demo32.bin 8192
+tools\pad .\src\bin\demo33_6000 .\src\bin\demo33.bin 8192
+tools\pad .\src\bin\demo34_6000 .\src\bin\demo34.bin 8192
+tools\pad .\src\bin\demo35_6000 .\src\bin\demo35.bin 8192
 
 rem Concatenate
 rem The number of banks we concatenate must be a power of 2. That is the last
@@ -106,9 +112,9 @@ copy /b ^
     .\src\bin\demo30.bin+ ^
     .\src\bin\demo31.bin+ ^
     .\src\bin\demo32.bin+ ^
-    .\src\bin\demo0.bin+ ^
-    .\src\bin\demo0.bin+ ^
-    .\src\bin\demo0.bin+ ^
+    .\src\bin\demo33.bin+ ^
+    .\src\bin\demo34.bin+ ^
+    .\src\bin\demo35.bin+ ^
     .\src\bin\demo0.bin+ ^
     .\src\bin\demo0.bin+ ^
     .\src\bin\demo0.bin+ ^
