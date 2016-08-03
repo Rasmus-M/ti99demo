@@ -144,8 +144,8 @@ DRAW1  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>B4B6
        BL   @SETCLR
 *      Select empty pattern table
-       LI   R0,>0406
-       BL   @VWTR
+*       LI   R0,>0406
+*       BL   @VWTR
 *      Initialize the Pattern Tables
        LI   R0,PTRNTB
        LI   R2,>2000
@@ -196,8 +196,8 @@ DRAW2  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>8D8E
        BL   @SETCLR
 *      Select empty pattern table
-       LI   R0,>0406
-       BL   @VWTR
+*       LI   R0,>0406
+*       BL   @VWTR
 *      Initialize the Pattern Tables
        LI   R0,PTRNTB
        LI   R2,>2000
@@ -250,8 +250,8 @@ DRAW3  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>E5EC
        BL   @SETCLR
 *      Select empty pattern table
-       LI   R0,>0406
-       BL   @VWTR
+*       LI   R0,>0406
+*       BL   @VWTR
 *      Initialize the Pattern Tables
        LI   R0,PTRNTB
        LI   R2,>2000
@@ -302,8 +302,8 @@ DRAW4  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>FAF7
        BL   @SETCLR
 *      Select empty pattern table
-       LI   R0,>0406
-       BL   @VWTR
+*       LI   R0,>0406
+*       BL   @VWTR
 *      Initialize the Pattern Tables
        LI   R0,PTRNTB
        LI   R2,>2000
@@ -349,8 +349,8 @@ DRAW5  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>FCF3
        BL   @SETCLR
 *      Select empty pattern table
-       LI   R0,>0406
-       BL   @VWTR
+*       LI   R0,>0406
+*       BL   @VWTR
 *      Initialize the Pattern Tables
        LI   R0,PTRNTB
        LI   R2,>2000
