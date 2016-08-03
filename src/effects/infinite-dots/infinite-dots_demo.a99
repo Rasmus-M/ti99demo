@@ -144,12 +144,15 @@ DRAW1  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>B4B6
        BL   @SETCLR
 *      Select empty pattern table
-*       LI   R0,>0406
-*       BL   @VWTR
+       LI   R0,>0406
+       BL   @VWTR
 *      Initialize the Pattern Tables
        LI   R0,PTRNTB
        LI   R2,>2000
        BL   @VCLR
+*      Select first pattern table
+       LI   R0,>0400
+       BL   @VWTR
 *      Draw dots
        CLR  @TICK
 *      X
@@ -196,12 +199,15 @@ DRAW2  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>8D8E
        BL   @SETCLR
 *      Select empty pattern table
-*       LI   R0,>0406
-*       BL   @VWTR
+       LI   R0,>0406
+       BL   @VWTR
 *      Initialize the Pattern Tables
        LI   R0,PTRNTB
        LI   R2,>2000
        BL   @VCLR
+*      Select first pattern table
+       LI   R0,>0400
+       BL   @VWTR
 *      Draw dots
        CLR  @TICK
 *      X
@@ -250,12 +256,15 @@ DRAW3  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>E5EC
        BL   @SETCLR
 *      Select empty pattern table
-*       LI   R0,>0406
-*       BL   @VWTR
+       LI   R0,>0406
+       BL   @VWTR
 *      Initialize the Pattern Tables
        LI   R0,PTRNTB
        LI   R2,>2000
        BL   @VCLR
+*      Select first pattern table
+       LI   R0,>0400
+       BL   @VWTR
 *      Draw dots
        CLR  @TICK
 *      X
@@ -302,12 +311,15 @@ DRAW4  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>FAF7
        BL   @SETCLR
 *      Select empty pattern table
-*       LI   R0,>0406
-*       BL   @VWTR
+       LI   R0,>0406
+       BL   @VWTR
 *      Initialize the Pattern Tables
        LI   R0,PTRNTB
        LI   R2,>2000
        BL   @VCLR
+*      Select first pattern table
+       LI   R0,>0400
+       BL   @VWTR
 *      Draw dots
        CLR  @TICK
 *      X
@@ -349,12 +361,16 @@ DRAW5  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>FCF3
        BL   @SETCLR
 *      Select empty pattern table
-*       LI   R0,>0406
-*       BL   @VWTR
+       LI   R0,>0406
+       BL   @VWTR
 *      Initialize the Pattern Tables
        LI   R0,PTRNTB
        LI   R2,>2000
        BL   @VCLR
+*      Select first pattern table
+       LI   R0,>0400
+       BL   @VWTR
+*      Draw stars
        CLR  @TICK
 DRAW51 MOV  @TICK,R1
        CI   R1,4
@@ -862,7 +878,7 @@ ININT2 MOV  R0,R2                      ; Get X
        INC  R1
        CI   R1,24
        JLT  ININT1
-*      Extra, empty patterm table
+*      Extra, empty pattern table
        LI   R0,PTRNT0
        CLR  R1
        LI   R2,>800
@@ -893,7 +909,7 @@ VREGS  BYTE >00                        ; Graphics I mode
        BYTE >A2                        ; 16K, display off, interrupt enabled
        BYTE >08                        ; NAMETB = >2000
        BYTE >8C                        ; COLRTB = >2300
-       BYTE >03                        ; PTRNTB = >0000
+       BYTE >06                        ; PTRNTB = >3000
        BYTE >47                        ; SPRATB = >2380
        BYTE >05                        ; SPRPTB = >2800
        BYTE >0F                        ; Backdrop color
