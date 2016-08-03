@@ -1091,7 +1091,7 @@ SCNLST
 *      DATA >0008, >0501  ; Bank 8: Square tunnel                      Mode 1
        DATA >0006, >0501  ; Bank 6: Raycaster                          Mode 2
        DATA >0003, >0500  ; Bank 3: Dot fx                             Mode 2 hybrid
-       DATA >0004, >0500  ; Bank 4: Lena image                         Mode 2
+*      DATA >0004, >0500  ; Bank 4: Lena image                         Mode 2
 
        DATA >000C, >0500  ; Bank 12: Twister and scroller              Mode 2 hybrid
        DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
