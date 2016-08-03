@@ -29,14 +29,12 @@ python tools\xdt99\xas99.py -b -R -o .\src\bin\demo24 .\src\effects\multisplit\m
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo25 .\src\effects\decoder\decoder_demo.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo26 .\src\effects\decoder\animation32.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo27 .\src\effects\decoder\animation33.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo28 .\src\effects\title\dontmessp.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo29 .\src\effects\title\dontmessc.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo30 .\src\effects\title\title.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo31 .\src\effects\credits\credits.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo32 .\src\effects\music\songbank2.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo33 .\src\effects\stretch\stretch.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo34 .\src\effects\stretch\data_bfe0.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo35 .\src\effects\stretch\data_dfc0.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo28 .\src\effects\title\title.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo29 .\src\effects\credits\credits.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo30 .\src\effects\music\songbank2.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo31 .\src\effects\stretch\stretch.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo32 .\src\effects\stretch\data_bfe0.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo33 .\src\effects\stretch\data_dfc0.a99
 
 rem Create disk
 rem The order these appear in this list determines the bank index, so always add
@@ -80,8 +78,6 @@ python tools\xdt99\xdm99.py demo.dsk -a ^
     .\src\bin\demo31_0000 ^
     .\src\bin\demo32_0000 ^
     .\src\bin\demo33_0000 ^
-    .\src\bin\demo34_0000 ^
-    .\src\bin\demo35_0000 ^
     -n DEMOA
 
 call makesams.bat

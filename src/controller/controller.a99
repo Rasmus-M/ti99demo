@@ -830,7 +830,7 @@ MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
        
 * Load all files to SAMS
        .ifdef SAMS
-FCOUNT EQU  36                         ; Number of files to load
+FCOUNT EQU  34                         ; Number of files to load
 *      Set SAMS registers to standard values
        CLR  R0
        CLR  R3
@@ -1076,14 +1076,14 @@ WPBU    DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
 *********************************************************************
        EVEN
 SCNLST
-       DATA >0021, >0500  ; Bank 33: Stretch                           Mode 2 hybrid
-       DATA >001E, >0500  ; Bank 30: Don't mess with Texas (image)     Mode 2
+       DATA >001F, >0500  ; Bank 33: Stretch                           Mode 2 hybrid
+       DATA >001C, >0500  ; Bank 30: Title - Don't mess with Texas     Mode 2
        DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
        DATA >0019, >0500  ; Bank 25: Spinning box animation (decoder)  Mode 2 hybrid
        DATA >0016, >0500  ; Bank 22: Infinite dots                     Mode 1
        DATA >0015, >0500  ; Bank 21: Multicolor rotozoom               Mode 3
        DATA >0011, >0500  ; Bank 17: Infinite bobs                     Mode 2
-       DATA >000A, >0500  ; Bank 10: Boing ball                        Mode 2
+       DATA >000A, >0500  ; Bank 10: Boing ball                        Mode 2 hybrid
        DATA >0010, >0500  ; Bank 16: Checkerboard zoom                 Mode 1
 
        DATA >000E, >0500  ; Bank 14: Multiplane                        Mode 1
@@ -1097,6 +1097,6 @@ SCNLST
        DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
        DATA >0017, >0500  ; Bank 23: Multisplit                        Mode 1/2/3
        DATA >0013, >0500  ; Bank 19: Splitscreen 3D scroller           Mode 1
-       DATA >001F, >2000  ; Bank 31: Credits scroller                  Mode 1
+       DATA >001D, >1E00  ; Bank 31: Credits scroller                  Mode 1
        DATA >0000, >0000  ; Zero signifies reboot
        END

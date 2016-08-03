@@ -54,11 +54,11 @@ DSCRN  EQU  SCRPTR+2
 INIT   LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
 *      Load data
-       LI   R0,34                      ; Bank / file index in R0
+       LI   R0,32                      ; Bank / file index in R0
        LI   R1,>BFE0                   ; Destination in R1
        LI   R2,>1FE0                   ; Number of bytes to copy in R2
        BL   @LDTORAM
-       LI   R0,35                      ; Bank / file index in R0
+       LI   R0,33                      ; Bank / file index in R0
        LI   R1,>DFC0                   ; Destination in R1
        LI   R2,>1000                   ; Number of bytes to copy in R2
        BL   @LDTORAM
@@ -172,7 +172,7 @@ FRAME2 CI   R0,SCRNSE
 FRAME3 INC  @TICK
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,128+32
+       CI   R1,122
        JL   RETURN
        SETO R0
 *      Return

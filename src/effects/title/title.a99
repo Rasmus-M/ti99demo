@@ -43,14 +43,14 @@ SPREAD EQU  SPSTAT+2                   ; Status read routine
 *
 INIT   LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
-*      Sprite end marker
-       LI   R0,SPRATB
-       LI   R1,>D000
-       BL   @VSBW
-*      Copy bitmap to screen
-       LI   R1,28                      ; Bank / file index that contains pattern table
-       LI   R2,29                      ; Bank / file index that contains color table
-       BL   @BITMAP                    ; Draw image on screen
+       BL   @GMODE
+*      Extract bitmap to screen
+       LI   R0,PTRNTB
+       LI   R1,PATS
+       BL   @RLEDC
+       LI   R0,COLRTB
+       LI   R1,COLS
+       BL   @RLEDC
 *      Copy status read routine to scratchpad
        LI   R1,SPREAD
        LI   R2,SPCODE
@@ -69,6 +69,9 @@ CPYPAD MOV  *R2+,*R1+
        BL   @SPINIT
 *      Init variables
 INIT1  CLR  @TICK
+*      Screen on
+       LI   R0,>01E2
+       BL   @VWTR
 *      Return
        DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
@@ -339,6 +342,73 @@ SPEECH
 
 ********************************************************************************
 *
+* VDP Write To Register
+*
+* R0 MSB: VDP register to write to
+* R0 LSB: Value to write
+*
+VWTR   MOVB @R0LB,@VDPWA               ; Send low byte (value) to write to VDP register
+       ORI  R0,>8000                   ; Set up a VDP register write operation (10)
+       MOVB R0,@VDPWA                  ; Send high byte (address) of VDP register
+       B    *R11
+*// VWTR
+
+*********************************************************************************
+*
+* Set graphics mode
+*
+GMODE  MOV  R11,*R10+                  ; Push return address onto the stack
+       CLR  R0
+       LI   R1,VREGS
+       LI   R2,8
+GMODE1 MOVB *R1+,@R0LB
+       BL   @VWTR                      ; Set register
+       AI   R0,>0100
+       DEC  R2
+       JNE  GMODE1
+*      Setup name table for bitmap drawing
+       LI   R0,NAMETB
+       BL   @VWAD
+       CLR  R1
+       LI   R2,768
+GMODE2 MOVB R1,@VDPWD
+       AI   R1,>0100
+       BL   @PLAYSNG
+       DEC  R2
+       JNE  GMODE2
+*      Sprite end marker
+       LI   R0,SPRATB
+       LI   R1,>D000
+       BL   @VSBW
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+VREGS  BYTE >02                        ; Graphics II mode
+       BYTE >A2                        ; 16K, display off, interrupt enabled
+       BYTE >0E                        ; NAMETB = >3800
+       BYTE >FF                        ; COLRTB = >2000, >1800 bytes
+       BYTE >03                        ; PTRNTB = >0000, >1800 bytes
+       BYTE >76                        ; SPRATB = >3B00
+       BYTE >03                        ; SPRPTB = >1800
+       BYTE >00                        ; Backdrop color
+*// GMODE
+
+********************************************************************************
+*
+* VDP Set Write Address
+*
+* R0: Address to set VDP address counter to
+*
+VWAD   MOVB @R0LB,@VDPWA               ; Send low byte of VDP RAM write address
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       ANDI R0,>3FFF                   ; Restore R0 top two MSbits
+       B    *R11
+*// VWAD
+
+********************************************************************************
+*
 * VDP Single Byte Write
 *
 * R0: Write address in VDP RAM
@@ -352,3 +422,45 @@ VSBW   MOVB @R0LB,@VDPWA               ; Send low byte of VDP RAM write address
        MOVB R1,@VDPWD                  ; Write byte to VDP RAM
        B    *R11
 *// VSBW
+
+********************************************************************************
+*
+* RLE decode to VDP RAM
+*
+* R0: Destination
+* R1: Source
+*
+RLEDC  MOV  R11,*R10+                  ; Push return address onto the stack
+       BL   @VWAD
+       LI   R0,VDPWD
+INIMA1 MOVB *R1+,R2
+       JEQ  INIMA5
+       JLT  INIMA3
+*      Different bytes
+       SRL  R2,8
+INIMA2 MOVB *R1+,*R0
+       DEC  R2
+       JNE  INIMA2
+       BL   @PLAYSNG
+       JMP  INIMA1
+*      Identical bytes
+INIMA3 ANDI R2,>7F00
+       SRL  R2,8
+       MOVB *R1+,R3
+INIMA4 MOVB R3,*R0
+       DEC  R2
+       JNE  INIMA4
+       BL   @PLAYSNG
+       JMP  INIMA1
+*      Return
+INIMA5 DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// RLEDC
+
+********************************************************************************
+*
+* Include image files
+*
+PATS   BCOPY "dontmess-tiap-rle.bin"
+COLS   BCOPY "dontmess-tiac-rle.bin"
