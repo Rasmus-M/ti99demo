@@ -132,7 +132,7 @@ LOOP5  BL   @UPDSPR
        INC  @TICK                      ; Next frame
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,3000
+       CI   R1,2800
        JL   RETURN
        SETO R0
 *      Return

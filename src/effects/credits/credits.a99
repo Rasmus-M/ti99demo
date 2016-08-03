@@ -99,7 +99,7 @@ FRAME  LI	R10,STACK
 	   INC	@ROWNO				* Next text row
 LOOP   CLR  R0
 	   MOV  @ROWNO,R1
-	   CI   R1,232
+	   CI   R1,328
 	   JLT  RETURN
 	   SETO R0
 *	   Return
@@ -137,7 +137,7 @@ UPDNT  MOV  R11,*R10+			* Push return address onto the stack
 UPDNT1 MOV	R4,R0				* Get current row number
 	   JLT	UPDNT4				* Skip if row number is negative
 	   SRA	R0,1				* Divide by 2 to get text line
-	   ANDI	R0,>007F			* Wrap at 128 lines
+	   ANDI	R0,>00FF			* Wrap at 256 lines
 	   SLA	R0,5				* Multiply row by 32 to get offset
 	   AI	R0,SCRTXT			* Add text base address
 	   LI	R2,32				* Byte/character counter
@@ -527,6 +527,38 @@ SCRTXT TEXT '                                '
 	   TEXT '                                '
 	   TEXT '                                '
 	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
 	   TEXT '     TTTTTTTTTTTTTTTTTTTTTT     '
 	   TEXT '     TTTTTTTTTTTTTTTTTTTTTT     '
 	   TEXT '     TTTTTTTTTTTTTTTTTTTTTT     '
@@ -614,7 +646,29 @@ SCRTXT TEXT '                                '
 	   TEXT '                                '
 	   TEXT '                                '
 	   TEXT '                                '
-	   
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+	   TEXT '                                '
+
 PAT0   DATA >0000,>0000,>0000,>0000    ;
        COPY "font.a99"
        COPY "sprites.a99"

@@ -1076,8 +1076,8 @@ WPBU    DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
 *********************************************************************
        EVEN
 SCNLST
-       DATA >001F, >0500  ; Bank 33: Stretch                           Mode 2 hybrid
-       DATA >001C, >0500  ; Bank 30: Title - Don't mess with Texas     Mode 2
+       DATA >001F, >0500  ; Bank 31: Stretch                           Mode 2 hybrid
+       DATA >001C, >0500  ; Bank 28: Title - Don't mess with Texas     Mode 2
        DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
        DATA >0019, >0500  ; Bank 25: Spinning box animation (decoder)  Mode 2 hybrid
        DATA >0016, >0500  ; Bank 22: Infinite dots                     Mode 1
@@ -1097,6 +1097,6 @@ SCNLST
        DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
        DATA >0017, >0500  ; Bank 23: Multisplit                        Mode 1/2/3
        DATA >0013, >0500  ; Bank 19: Splitscreen 3D scroller           Mode 1
-       DATA >001D, >1E00  ; Bank 31: Credits scroller                  Mode 1
+       DATA >001D, >1E00  ; Bank 29: Credits scroller                  Mode 1
        DATA >0000, >0000  ; Zero signifies reboot
        END
