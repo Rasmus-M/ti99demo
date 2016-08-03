@@ -32,7 +32,7 @@ python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo29 --base 0x6000
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo30 --base 0x6000 .\src\effects\title\title.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo31 --base 0x6000 .\src\effects\credits\credits.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo32 --base 0x6000 .\src\effects\music\songbank2.a99
-python tools\xdt99\xas99.py -b -R -L stretch.lst -D CARTRIDGE -o .\src\bin\demo33 --base 0x6000 .\src\effects\stretch\stretch.a99
+python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo33 --base 0x6000 .\src\effects\stretch\stretch.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo34 --base 0x6000 .\src\effects\stretch\data_bfe0.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo35 --base 0x6000 .\src\effects\stretch\data_dfc0.a99
 

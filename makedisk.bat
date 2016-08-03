@@ -2,9 +2,9 @@
 
 rem Assemble
 python tools\xdt99\xas99.py -i -R -L controller.lst -o .\src\bin\demo0 .\src\controller\controller.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo1 .\src\effects\lena\lenap.a99 
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo2 .\src\effects\lena\lenac.a99 
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo3 .\src\effects\dotfx\dotfx.a99 
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo1 .\src\effects\lena\lenap.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo2 .\src\effects\lena\lenac.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo3 .\src\effects\dotfx\dotfx.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo4 .\src\effects\lena\loadlena.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo5 .\src\effects\music\songbank1.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo6 .\src\effects\raycaster\raycaster.a99
@@ -34,12 +34,17 @@ python tools\xdt99\xas99.py -b -R -o .\src\bin\demo29 .\src\effects\title\dontme
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo30 .\src\effects\title\title.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo31 .\src\effects\credits\credits.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo32 .\src\effects\music\songbank2.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo33 .\src\effects\stretch\stretch.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo34 .\src\effects\stretch\data_bfe0.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo35 .\src\effects\stretch\data_dfc0.a99
 
 rem Create disk
 rem The order these appear in this list determines the bank index, so always add
 rem to the end of the list!
 if exist demo.dsk (del demo.dsk)
-python tools\xdt99\xdm99.py demo.dsk --initialize 720 -n DEMO
+rem For now we're using a 360K image until we have reclaimed some more space
+rem python tools\xdt99\xdm99.py demo.dsk --initialize 720 -n DEMO
+python tools\xdt99\xdm99.py demo.dsk --initialize 1440 -n DEMO
 python tools\xdt99\xdm99.py demo.dsk -a ^
     .\src\bin\demo0 ^
     .\src\bin\demo1_0000 ^
@@ -74,6 +79,9 @@ python tools\xdt99\xdm99.py demo.dsk -a ^
     .\src\bin\demo30_0000 ^
     .\src\bin\demo31_0000 ^
     .\src\bin\demo32_0000 ^
+    .\src\bin\demo33_0000 ^
+    .\src\bin\demo34_0000 ^
+    .\src\bin\demo35_0000 ^
     -n DEMOA
 
 call makesams.bat
