@@ -169,17 +169,17 @@ RETURN DECT R10                        ; Pop return address off the stack
 *// FRAME
 
 * Only graphics mode
-TICK1  DATA >100
+TICK1  DATA >80
 * Only bitmap mode
-TICK2  DATA >200
+TICK2  DATA >100
 * Only multicolor mode
-TICK3  DATA >300
+TICK3  DATA >180
 * Only graphics mode
-TICK4  DATA >400
+TICK4  DATA >200
 * Graphics/bitmap
-TICK5  DATA >500
+TICK5  DATA >300
 * Graphics/bitmap/multicolor
-TICK6  DATA >800
+TICK6  DATA >600
 * Done
 
 *********************************************************************************
