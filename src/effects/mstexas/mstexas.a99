@@ -72,7 +72,7 @@ TICK   DATA 0
 DSRDAT DATA >2EAA				* values used by DSRs
 QUITK  DATA >1100				* CRU value for QUIT
 dat40	 data >4000				* bitfield used by the unpacker
-datff	 data >00FF				* countdown for unpacker
+datff	 data >007F				* countdown for unpacker
 
 * screen timeout register - we reset this every frame we run
 * only matters if the console int is running...
@@ -582,7 +582,7 @@ unplp1
 	MOV R1,R0				* restore the address
 	ORI R0,>4000
 	BL @VWAD
-	AI R1,>0100			* next cycle!
+	AI R1,>0080			* next cycle!
 	
 	mov r2,r2
 	jne unplp2			* not done
