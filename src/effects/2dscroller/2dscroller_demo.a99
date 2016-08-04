@@ -762,8 +762,7 @@ VDPW7  DATA >0007
 * Variables and Data
 *
 TXT    TEXT '    WELCOME TO THE TI-99/4A MEGADEMO ...    '
-       TEXT '!"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_    '
-       TEXT 'CRASHING NOW...    '
+*       TEXT '    TMS9900 CPU, TMS9918A VDP, TMS9919 PSG ...         '
        BYTE 0
        EVEN
 
