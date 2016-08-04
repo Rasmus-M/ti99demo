@@ -102,44 +102,44 @@ HMREGS DATA >81A0,>8002,>820E,>83FF,>8403,>8576,>8707,>8700,>7B00,>0000
 * except per-scanline paletted images without conflicting with the disk system.
 * For those, we can backup the disk buffers as they are only 1061 bytes
 ******************
-FILES
-	MOV R11,@SAVE		* save return address, assume DSR trashes everything
-	
-	LI R0,>0100
-	MOVB R0,@>834C	* 1 file desired
-	
-	LWPI >83E0			* GPLWS
-	LI R12,>1000		* We will search for the first FILES subprogram
-FILEGO	
-	SBO 0						* turn on the ROM
-	MOV @>400A,R1		* get pointer to the subprogram list
-FILELP
-	JEQ FILEDON			* no subprograms
-	MOV *R1+,R3			* link to next item
-	MOV *R1+,R2			* address of this one
-	MOV *R1+,R0			* we are looking for length 1, name >16
-	CI R0,>0116
-	JEQ FILEGT
-	MOV R3,R1				* nope, get next
-	JMP FILELP
-
-* Found it
-FILEGT
-	BL *R2					* go ahead and call it
-	NOP							* skipped on success
-	JMP FIOK				* all done
-
-FILEDON
-	SBZ 0						* turn it off, wasn't on this card
-	AI R12,>0100		* next card
-	CI R12,>2000		* are we done?
-	JNE FILEGO			* if we can't find it, note we just exit silently
-
-FIOK
-	SBZ 0						* turn off the ROM
-	LWPI >8300			* our own WS back
-	MOV @SAVE,R11		* get back return address, no telling what the DSR did
-	B *R11
+;FILES
+;	MOV R11,@SAVE		* save return address, assume DSR trashes everything
+;
+;	LI R0,>0100
+;	MOVB R0,@>834C	* 1 file desired
+;
+;	LWPI >83E0			* GPLWS
+;	LI R12,>1000		* We will search for the first FILES subprogram
+;FILEGO
+;	SBO 0						* turn on the ROM
+;	MOV @>400A,R1		* get pointer to the subprogram list
+;FILELP
+;	JEQ FILEDON			* no subprograms
+;	MOV *R1+,R3			* link to next item
+;	MOV *R1+,R2			* address of this one
+;	MOV *R1+,R0			* we are looking for length 1, name >16
+;	CI R0,>0116
+;	JEQ FILEGT
+;	MOV R3,R1				* nope, get next
+;	JMP FILELP
+;
+;* Found it
+;FILEGT
+;	BL *R2					* go ahead and call it
+;	NOP							* skipped on success
+;	JMP FIOK				* all done
+;
+;FILEDON
+;	SBZ 0						* turn it off, wasn't on this card
+;	AI R12,>0100		* next card
+;	CI R12,>2000		* are we done?
+;	JNE FILEGO			* if we can't find it, note we just exit silently
+;
+;FIOK
+;	SBZ 0						* turn off the ROM
+;	LWPI >8300			* our own WS back
+;	MOV @SAVE,R11		* get back return address, no telling what the DSR did
+;	B *R11
 
 * VDP access
 
