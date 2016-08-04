@@ -26,6 +26,8 @@ INIT   MOV  R11,@INIRET
        LI   R1,PICPP                   ; Destination in R1
        LI   R2,SIZE_OF_PICPP           ; Number of bytes to copy in R2
        BL   @LDTORAM
+*      Run Tursi's code
+       BL   @MSTART
 *      Return
        MOV  @INIRET,R11
        B    *R11
@@ -37,12 +39,20 @@ INIRET DATA 0
 * Frame
 *
 FRAME  MOV  R11,@FRMRET
-       CLR R0                          ; Signal done
-
+       MOV  R3,@TICK
+*      Call 'interrupt routine'
+       BL   @MODE4I
+*      Measure time to finish
+       CLR  R0                         ; Signal not done
+       MOV  @TICK,R3
+       CI   R3,600
+       JL   RETURN
+       SETO R0                         ; Signal done
 *      Return
-       MOV  @FRMRET,R11
+RETURN MOV  @FRMRET,R11
        B    *R11
 FRMRET DATA 0
+TICK   DATA 0
 *// FRAME
 
 *********************************************************************************
@@ -248,7 +258,7 @@ VMBSLP
 	B *R11
 
 ******************	
-* Write address or register
+* Write address or register (renamed from VDPWA by Asmusr)
 ******************
 VWAD
 	SWPB R0
@@ -288,7 +298,7 @@ HALFM
 * set up screen image table (not normal bitmap, each bank offset by 1 line)
 * the real final table is written to scrnbuf, the screen gets all >FF
 	LI R0,>7800
-	BL @VDPWA
+	BL @VWAD
 	LI R4,>FF00
 	LI R5,scrnbuf
 	CLR R2
@@ -333,7 +343,7 @@ DELAY
 	MOV R11,@SAVE2
 
 DELLP	
-	seto @scrnto		* reset the screen timeout (and make odd)
+;	seto @scrnto		* reset the screen timeout (and make odd)
 
 * This quit test copied from the console ROM
 WAIT2
@@ -346,9 +356,12 @@ WAIT2
 	JNE WAIT
 	B @REBOOT				* reboot if yes
 WAIT
-	CLR R12					* prepare to check interrupt
-	TB 2						* check VDP status
-	JEQ WAIT2				* no interrupt yet
+;	CLR R12					* prepare to check interrupt
+;	TB 2						* check VDP status
+;	JEQ WAIT2				* no interrupt yet
+    BL @PLAYSNG                        ; Play music
+    ABS @VDPINT
+    JEQ WAIT2
 
 	MOV @INTFTN,R1
 	JEQ WAIT4
@@ -375,7 +388,7 @@ SETR1
 	SWPB R0
 	LI R1,>8100
 	MOVB R1,R0
-	BL @VDPWA
+	BL @VWAD
 	MOV @SAVE,R11
 	B *R11
 	
@@ -385,7 +398,7 @@ SETR1
 MODE4I
   MOV R11,@SAVEINT
   
-  MOV @>8802,R0		* clear status
+;  MOV @>8802,R0		* clear status
 
 	MOV @FLAG,R0		* see which frame we're on
 	JNE INTR42
@@ -393,10 +406,10 @@ MODE4I
 	
 	MOV R11,R1
 	LI R0,>8000
-	BL @VDPWA
+	BL @VWAD
 	MOV R1,R11
 	LI R0,>81E8
-	BL @VDPWA
+	BL @VWAD
 	JMP CHAIN
 
 INTR42
@@ -404,17 +417,17 @@ INTR42
 	
 	MOV R11,R1
 	LI R0,>8002
-	BL @VDPWA
+	BL @VWAD
 	MOV R1,R11
 	LI R0,>81E0
-	BL @VDPWA
+	BL @VWAD
 
 CHAIN	
 * chain to the old int, if any (music)
   MOV @SAVEINT,R11
-  MOV @OLDINT,R0
-  JEQ NOINT
-  B *R0
+;  MOV @OLDINT,R0
+;  JEQ NOINT
+;  B *R0
 NOINT  
 	B *R11
 	
@@ -568,7 +581,7 @@ unplp1
 
 	MOV R1,R0				* restore the address
 	ORI R0,>4000
-	BL @VDPWA
+	BL @VWAD
 	AI R1,>0100			* next cycle!
 	
 	mov r2,r2
@@ -589,12 +602,15 @@ unplp2
 * HERE WE GO	
 ******************
 MSTART
-	LWPI >8300
-	BL @FILES			* make sure only 1 file
+
+    MOV  R11,@MSAVE
+
+;	LWPI >8300
+;	BL @FILES			* make sure only 1 file
 	BL @HALFM			* Set half-multicolor mode
 
 * set interrupt, preserve the old one
-	CLR @OLDINT		* no screen int just yet
+;	CLR @OLDINT		* no screen int just yet
 
 * load the image, except we'll leave the very last
 * character all zeros so we can use it as a space
@@ -729,84 +745,90 @@ alldone
 	LI R2,8
 	BL @VMBW
 
-	LI R0,420				* pause 420 frames (7 seconds)
-	BL @delay				* do it
+;	LI R0,420				* pause 420 frames (7 seconds)
+;	BL @delay				* do it
 	
-* now to unwind the pic we need to zero the '255' chars again
-	LI R0,>27F8
-	CLR R1
-	LI R2,8
-	BL @VMBSET
-	
-	LI R0,>2FF8
-	CLR R1
-	LI R2,8
-	BL @VMBSET
-	
-	LI R0,>37F8
-	CLR R1
-	LI R2,8
-	BL @VMBSET
-	
-	LI R0,>1FF8
-	CLR R1
-	LI R2,8
-	BL @VMBSET
-	
-* and start moving it out
-	li r0,1
-	mov r0,@animcnt
-	
-* animation loop	
-lplp2	
-	inc @animcnt
-	mov @animcnt,r3
-	ci r3,32
-	jeq alldon2				* wrapped around from zero
-	li r4,>3800				* screen output
-	li r5,scrnbuf			* pattern buffer
-	
-scrnlp2
-	mov r4,r0					* line on screen
-	a r3,r0						* to right edge
-	mov r5,r1					* line in buffer
-	li r2,32					* width of screen
-	s r3,r2						* minus the counter
-	bl @vmbwset				* write the data
-	
-	ai r4,32					* next line
-	ai r5,32					* on both
-	
-	mov r4,r0					* line on screen
-	mov r5,r1					* line in buffer
-	a r3,r1						* to right edge
-	li r2,32					* width of screen
-	s r3,r2						* minus the counter
-	bl @vmbw					* write the data
-	li r0,>FF00				* write a >FF byte
-	movb r0,@>8C00		* to VDP
-	
-	ai r4,32					* next line
-	ai r5,32					* on both
-	
-	ci r4,>3B00				* end of screen
-	jlt scrnlp2				* keep working
-
-	LI R0,2						* pause 2 frames so the flicker shows
-	BL @delay					* do it
-	jmp lplp2					* and do the next frame
-	
-alldon2
-	li r0,>3800				* make sure the screen is clear
-	li r1,>ff00
-	li r2,768
-	bl @VMBSET
+;* now to unwind the pic we need to zero the '255' chars again
+;	LI R0,>27F8
+;	CLR R1
+;	LI R2,8
+;	BL @VMBSET
+;
+;	LI R0,>2FF8
+;	CLR R1
+;	LI R2,8
+;	BL @VMBSET
+;
+;	LI R0,>37F8
+;	CLR R1
+;	LI R2,8
+;	BL @VMBSET
+;
+;	LI R0,>1FF8
+;	CLR R1
+;	LI R2,8
+;	BL @VMBSET
+;
+;* and start moving it out
+;	li r0,1
+;	mov r0,@animcnt
+;
+;* animation loop
+;lplp2
+;	inc @animcnt
+;	mov @animcnt,r3
+;	ci r3,32
+;	jeq alldon2				* wrapped around from zero
+;	li r4,>3800				* screen output
+;	li r5,scrnbuf			* pattern buffer
+;
+;scrnlp2
+;	mov r4,r0					* line on screen
+;	a r3,r0						* to right edge
+;	mov r5,r1					* line in buffer
+;	li r2,32					* width of screen
+;	s r3,r2						* minus the counter
+;	bl @vmbwset				* write the data
+;
+;	ai r4,32					* next line
+;	ai r5,32					* on both
+;
+;	mov r4,r0					* line on screen
+;	mov r5,r1					* line in buffer
+;	a r3,r1						* to right edge
+;	li r2,32					* width of screen
+;	s r3,r2						* minus the counter
+;	bl @vmbw					* write the data
+;	li r0,>FF00				* write a >FF byte
+;	movb r0,@>8C00		* to VDP
+;
+;	ai r4,32					* next line
+;	ai r5,32					* on both
+;
+;	ci r4,>3B00				* end of screen
+;	jlt scrnlp2				* keep working
+;
+;	LI R0,2						* pause 2 frames so the flicker shows
+;	BL @delay					* do it
+;	jmp lplp2					* and do the next frame
+;
+;alldon2
+;	li r0,>3800				* make sure the screen is clear
+;	li r1,>ff00
+;	li r2,768
+;	bl @VMBSET
 		
-dnlp
-	li R0,1
-	bl @delay					* enable quit
-	jmp dnlp					* and do the next frame
-	
+;dnlp
+;	li R0,1
+;	bl @delay					* enable quit
+;	jmp dnlp					* and do the next frame
+
+
+       MOV  @MSAVE,R11
+       B    *R11
+
+MSAVE  DATA 0
+
 ******************
 * DATA FILES GO HERE	
 ******************

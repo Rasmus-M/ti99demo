@@ -1077,8 +1077,6 @@ WPBU    DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
 *********************************************************************
        EVEN
 SCNLST
-*       DATA >0001, >0500  ; Bank 1: Ms Texas                           Mode 2/3 flicker
-
        DATA >001F, >0500  ; Bank 31: Stretch                           Mode 2 hybrid
        DATA >001C, >0500  ; Bank 28: Title - Don't mess with Texas     Mode 2
        DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
@@ -1093,6 +1091,8 @@ SCNLST
        DATA >0009, >0501  ; Bank 9: Metaballs                          Mode 1
        DATA >0006, >0501  ; Bank 6: Raycaster                          Mode 2
        DATA >0003, >0500  ; Bank 3: Dot fx                             Mode 2 hybrid
+
+       DATA >0001, >0500  ; Bank 1: Ms Texas                           Mode 2/3 flicker
 
        DATA >000C, >0500  ; Bank 12: Twister and scroller              Mode 2 hybrid
        DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
