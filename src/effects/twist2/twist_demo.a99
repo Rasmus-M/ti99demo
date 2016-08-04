@@ -66,11 +66,15 @@ NSPR   EQU  14
 
 TOPINI LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
-*      Load map
-       LI   R0,>000D                   ; Bank / file index in R0
-       LI   R1,COL0                    ; Destination in R1
-       LI   R2,>187A                   ; Number of bytes to copy in R2
-       BL   @LDTORAM
+;*      Load map
+;       LI   R0,>000D                   ; Bank / file index in R0
+;       LI   R1,COL0                    ; Destination in R1
+;       LI   R2,>187A                   ; Number of bytes to copy in R2
+;       BL   @LDTORAM
+*      Decode map
+       LI   R0,COL0
+       LI   R1,RLEMAP
+       BL   @RLEDC
 *      Init
        BL   @GMODE
        LI   R0,NAMETA
@@ -768,6 +772,39 @@ RAND   LI   R14,28643                  ; A prime number to multiply by
 
 ********************************************************************************
 *
+* RLE decode to CPU RAM
+*
+* R0: Destination address
+* R1: Source address
+*
+RLEDC  MOV  R11,*R10+                  ; Push return address onto the stack
+RLEDC0 MOVB *R1+,R2
+       JEQ  RLEDC4
+       JLT  RLEDC2
+*      Different bytes
+       SRL  R2,8
+RLEDC1 MOVB *R1+,*R0+
+       DEC  R2
+       JNE  RLEDC1
+       BL   @PLAYSNG
+       JMP  RLEDC0
+*      Identical bytes
+RLEDC2 ANDI R2,>7F00
+       SRL  R2,8
+       MOVB *R1+,R3
+RLEDC3 MOVB R3,*R0+
+       DEC  R2
+       JNE  RLEDC3
+       BL   @PLAYSNG
+       JMP  RLEDC0
+*      Return
+RLEDC4 DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// RLEDC
+
+********************************************************************************
+*
 * Data
 *
 SPRY   EQU  0
@@ -861,4 +898,5 @@ TXTMAP BYTE >F8                        ; space
 * Include files
 *
        COPY "sprites2.a99"
+RLEMAP BCOPY "twistmap-rle.bin"
 

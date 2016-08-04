@@ -1063,6 +1063,7 @@ LDWP   LI   R15,WPBU+2
        
 WPBU    DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
         DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
+
 *********************************************************************
 * Scene List
 *
@@ -1076,6 +1077,8 @@ WPBU    DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
 *********************************************************************
        EVEN
 SCNLST
+*       DATA >0001, >0500  ; Bank 1: Ms Texas                           Mode 2/3 flicker
+
        DATA >001F, >0500  ; Bank 31: Stretch                           Mode 2 hybrid
        DATA >001C, >0500  ; Bank 28: Title - Don't mess with Texas     Mode 2
        DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
@@ -1088,10 +1091,8 @@ SCNLST
 
        DATA >000E, >0500  ; Bank 14: Multiplane                        Mode 1
        DATA >0009, >0501  ; Bank 9: Metaballs                          Mode 1
-*      DATA >0008, >0501  ; Bank 8: Square tunnel                      Mode 1
        DATA >0006, >0501  ; Bank 6: Raycaster                          Mode 2
        DATA >0003, >0500  ; Bank 3: Dot fx                             Mode 2 hybrid
-*      DATA >0004, >0500  ; Bank 4: Lena image                         Mode 2
 
        DATA >000C, >0500  ; Bank 12: Twister and scroller              Mode 2 hybrid
        DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
@@ -1099,4 +1100,5 @@ SCNLST
        DATA >0013, >0500  ; Bank 19: Splitscreen 3D scroller           Mode 1
        DATA >001D, >1E00  ; Bank 29: Credits scroller                  Mode 1
        DATA >0000, >0000  ; Zero signifies reboot
+
        END

@@ -850,4 +850,4 @@ FLARE8 DATA >0101,>0111,>0905,>03FF    * Color 15
        DATA >0000,>0010,>2040,>80FE
        DATA >8040,>2010,>0000,>0000
 
-BUFFER BSS  64*24
+BUFFER EQU  $                          ; BSS  64*24

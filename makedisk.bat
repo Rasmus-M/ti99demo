@@ -2,23 +2,19 @@
 
 rem Assemble
 python tools\xdt99\xas99.py -i -R -L controller.lst -o .\src\bin\demo0 .\src\controller\controller.a99
-rem python tools\xdt99\xas99.py -b -R -o .\src\bin\demo1 .\src\effects\lena\lenap.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo1 .\src\effects\empty\empty.a99
-rem python tools\xdt99\xas99.py -b -R -o .\src\bin\demo2 .\src\effects\lena\lenac.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo2 .\src\effects\empty\empty.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo1 .\src\effects\mstexas\mstexas.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo2 .\src\effects\mstexas\mstexas-tiap-pack.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo3 .\src\effects\dotfx\dotfx.a99
-rem python tools\xdt99\xas99.py -b -R -o .\src\bin\demo4 .\src\effects\lena\loadlena.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo4 .\src\effects\empty\empty.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo5 .\src\effects\music\songbank1.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo6 .\src\effects\raycaster\raycaster.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo7 .\src\effects\raycaster\casterdata.a99
-rem python tools\xdt99\xas99.py -b -R -o .\src\bin\demo8 .\src\effects\squaretunnel\squaretunnel.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo8 .\src\effects\empty\empty.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo9 .\src\effects\metaballs\metaballs.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo10 .\src\effects\ball\ball_demo.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo11 .\src\effects\ball\ball-mask-shadow_demo.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo12 .\src\effects\twist2\twist_demo.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo13 .\src\effects\twist2\twistmap_demo.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo13 .\src\effects\empty\empty.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo14 .\src\effects\multiplane\multiplane.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo15 .\src\effects\2dscroller\2dscroller_demo.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo16 .\src\effects\checkerboard\chkbrd_demo.a99

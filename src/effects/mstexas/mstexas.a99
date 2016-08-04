@@ -1,0 +1,1542 @@
+********************************************************************************
+*
+* Ms Texas flicker mode effect (Tursi)
+*
+********************************************************************************
+
+       COPY "../../common/HEADER.INC"
+       COPY "../../common/ROUTINES.INC"
+
+********************************************************************************
+*
+* Main program
+*
+       XORG FXMEM
+
+       DATA INIT                       ; Address of initialization routine
+       DATA FRAME                      ; Address of frame routine
+
+*********************************************************************************
+*
+* Intitialize
+*
+INIT   MOV  R11,@INIRET
+*      Load patterns from separate bank/file
+       LI   R0,2                       ; Bank / file index in R0
+       LI   R1,PICPP                   ; Destination in R1
+       LI   R2,SIZE_OF_PICPP           ; Number of bytes to copy in R2
+       BL   @LDTORAM
+*      Return
+       MOV  @INIRET,R11
+       B    *R11
+INIRET DATA 0
+*// INIT
+
+*********************************************************************************
+*
+* Frame
+*
+FRAME  MOV  R11,@FRMRET
+       CLR R0                          ; Signal done
+
+*      Return
+       MOV  @FRMRET,R11
+       B    *R11
+FRMRET DATA 0
+*// FRAME
+
+*********************************************************************************
+*
+* Tursi's code
+*
+* do the effect on all chars except 255, we'll leave that one black until everything's in place
+* that means there will be 3 black patterns around the screen
+* a further concern is we can't really move things around very much... bitmap needs to stay in the
+* same quadrant, multicolor on the same LINE. But it may look interesting to mix it up anyway,
+* and if we move it fast nobody's going to really care. Unfortunately, leaving the bitmap
+* quadrant (what's a third called?) will result in a changed pattern unless I move patterns, too,
+* which defeats the purpose of what I was trying. Let's just try a little chaos ;)
+
+*	DEF MSTART
+
+DSRDAT DATA >2EAA				* values used by DSRs
+QUITK  DATA >1100				* CRU value for QUIT
+dat40	 data >4000				* bitfield used by the unpacker
+datff	 data >00FF				* countdown for unpacker
+
+* screen timeout register - we reset this every frame we run
+* only matters if the console int is running...
+scrnto equ >83D6
+
+* interrupt hook vector
+INTFTN equ >83c4
+
+* registers for half-multicolor (sprites at >3B00)
+*
+* Bitmap pattern:		0000 - 17FF		1800 bytes	(load the TIAP here)
+* Multi pattern: 		1800 - 1FFF 	0800 bytes	(load the TIAM here)
+* Bitmap Color:			2000 - 37FF		1800 bytes	(load the TIAC here)
+* Shared Screen:		3800 - 3AFF		0300 bytes
+* Sprites Desc:			3B00 - 3B7F		0080 bytes
+* Sprite Pattern:		3800 - 3FFF		0800 (only room for 0480, which is 144 chars)
+* 
+* Sprite patterns can then only use from 3B80 - 3FFF, which is chars 112-255.
+*
+HMREGS DATA >81A0,>8002,>820E,>83FF,>8403,>8576,>8707,>8700,>7B00,>0000
+
+* TODO: the demo probably already did a CALL FILES? Does it also have a DSRLNK?
+
+******************
+* We need to implement a CALL FILES(1) before use to make loading work better
+* That puts the top of VRAM at >3BDB. With that there, we can load everything
+* except per-scanline paletted images without conflicting with the disk system.
+* For those, we can backup the disk buffers as they are only 1061 bytes
+******************
+FILES
+	MOV R11,@SAVE		* save return address, assume DSR trashes everything
+	
+	LI R0,>0100
+	MOVB R0,@>834C	* 1 file desired
+	
+	LWPI >83E0			* GPLWS
+	LI R12,>1000		* We will search for the first FILES subprogram
+FILEGO	
+	SBO 0						* turn on the ROM
+	MOV @>400A,R1		* get pointer to the subprogram list
+FILELP
+	JEQ FILEDON			* no subprograms
+	MOV *R1+,R3			* link to next item
+	MOV *R1+,R2			* address of this one
+	MOV *R1+,R0			* we are looking for length 1, name >16
+	CI R0,>0116
+	JEQ FILEGT
+	MOV R3,R1				* nope, get next
+	JMP FILELP
+
+* Found it
+FILEGT
+	BL *R2					* go ahead and call it
+	NOP							* skipped on success
+	JMP FIOK				* all done
+
+FILEDON
+	SBZ 0						* turn it off, wasn't on this card
+	AI R12,>0100		* next card
+	CI R12,>2000		* are we done?
+	JNE FILEGO			* if we can't find it, note we just exit silently
+
+FIOK
+	SBZ 0						* turn off the ROM
+	LWPI >8300			* our own WS back
+	MOV @SAVE,R11		* get back return address, no telling what the DSR did
+	B *R11
+
+* VDP access
+
+******************
+* Read single byte at R0 into MSB R1
+******************
+VSBR	
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+	MOVB @>8800,R1
+	B *R11
+
+******************
+* Read R2 bytes from VDP R0 to CPU R1	
+* Destroys R1,R2
+******************
+VMBR
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+VMBRLP
+	MOVB @>8800,*R1+
+	DEC R2
+	JNE VMBRLP
+	B *R11
+	
+******************
+* Write single byte to R0 from MSB R1
+* Destroys R0 (actually just oRs it)
+******************
+VSBW
+	ORI R0,>4000
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+	MOVB R1,@>8C00
+	B *R11
+
+******************
+* Write two bytes to R0 from R1
+* Destroys R0 (actually just oRs it)
+******************
+V2BW
+	ORI R0,>4000
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+	MOVB R1,@>8C00
+	SWPB R1
+	MOVB R1,@>8C00
+	B *R11
+
+******************
+* Reads two bytes from R0 to R1
+******************
+V2BR
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+	MOVB @>8800,R1
+	SWPB R1
+	MOVB @>8800,R1
+	SWPB R1
+	B *R11
+
+******************
+* Write R2 bytes from CPU R1 to VDP R0, with leading set of >FF
+* Destroys R0,R1,R2
+******************
+VMBWSET
+	ORI R0,>4000
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+	LI R0,>FF00
+	MOVB R0,@>8C00
+	JMP VMBWLP
+
+******************
+* Write R2 bytes from CPU R1 to VDP R0
+* Destroys R0,R1,R2
+******************
+VMBW
+	ORI R0,>4000
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+VMBWLP
+	MOVB *R1+,@>8C00
+	DEC R2
+	JNE VMBWLP
+	B *R11
+
+******************
+* Write R2 copies of MSB R1 to VDP R0
+* Destroys R0,R1,R2
+******************
+VMBSET
+	ORI R0,>4000
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+VMBSLP
+	MOVB R1,@>8C00
+	DEC R2
+	JNE VMBSLP
+	B *R11
+
+******************	
+* Write address or register
+******************
+VWAD
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+	B *R11  
+
+******************	
+* load regs list to VDP address, end on >0000 and write >D0 (for sprites)
+* address of table in R1 (destroyed)
+******************
+LOADRG
+LOADLP
+	MOV *R1+,R0
+	JEQ LDRDN
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+	JMP LOADLP
+LDRDN
+	LI R1,>D000
+	MOVB R1,@>8C00
+	B *R11
+
+******************
+* Setup for Half-Multicolor	
+******************
+HALFM	
+	MOV R11,@SAVE
+	
+* set display and disable sprites
+	LI R1,HMREGS
+	BL @LOADRG
+
+* set up screen image table (not normal bitmap, each bank offset by 1 line)
+* the real final table is written to scrnbuf, the screen gets all >FF
+	LI R0,>7800
+	BL @VDPWA
+	LI R4,>FF00
+	LI R5,scrnbuf
+	CLR R2
+	CLR R1
+	MOV R1,R3
+NQH# 
+	MOV R3,R1
+LPH#
+  MOVB R1,*R5+
+	MOVB R4,@>8C00
+	AI R1,>0100
+  MOVB R1,*R5+
+	MOVB R4,@>8C00
+	AI R1,>0100
+	CB R1,R3
+	JNE LPH#
+	AI R3,>2000		* change start offset by 32
+	INC R2
+	CI R2,3
+	JNE NQH#
+	
+	MOV @SAVE,R11
+	B *R11
+ 
+******************
+* KSCAN wrapper (always mode 5)
+******************
+KSCAN
+	LWPI >83E0	* GPLWS
+	LI R0,>0500
+	MOVB R0,@>8374
+	BL @>000E	* SCAN
+	LWPI >8300	* my WS
+	B *R11
+	
+******************
+* Delay for R0 jiffies with both QUIT and Enter/Space detection
+* does it internally for the sake of the F18A versions
+* messes with R12,R5,R1,R0
+******************
+DELAY
+	MOV R11,@SAVE2
+
+DELLP	
+	seto @scrnto		* reset the screen timeout (and make odd)
+
+* This quit test copied from the console ROM
+WAIT2
+	LI 12,>0024 		* Load CRU
+	LDCR @>0012,3
+	SRC 12,7				* delay
+	LI 12,>0006
+	STCR 5,8 				* Fetch CRU
+	CZC @QUITK,5 		* QUIT key?
+	JNE WAIT
+	B @REBOOT				* reboot if yes
+WAIT
+	CLR R12					* prepare to check interrupt
+	TB 2						* check VDP status
+	JEQ WAIT2				* no interrupt yet
+
+	MOV @INTFTN,R1
+	JEQ WAIT4
+	MOV R0,@cntsave
+	BL *R1
+	MOV @cntsave,R0
+WAIT4	
+	DEC R0
+	JNE DELLP
+	
+	MOV @SAVE2,R11	* timed out
+	B *R11
+
+REBOOT
+	BLWP @>0000 		* Software reset	
+	
+	
+******************
+* Set VDP R1 and >83D4 for KSCAN - value in R0 MSB
+******************
+SETR1
+	MOV R11,@SAVE
+	MOVB R0,@>83D4
+	SWPB R0
+	LI R1,>8100
+	MOVB R1,R0
+	BL @VDPWA
+	MOV @SAVE,R11
+	B *R11
+	
+******************
+* Half-multicolor interrupt	
+******************
+MODE4I
+  MOV R11,@SAVEINT
+  
+  MOV @>8802,R0		* clear status
+
+	MOV @FLAG,R0		* see which frame we're on
+	JNE INTR42
+	SETO @FLAG
+	
+	MOV R11,R1
+	LI R0,>8000
+	BL @VDPWA
+	MOV R1,R11
+	LI R0,>81E8
+	BL @VDPWA
+	JMP CHAIN
+
+INTR42
+	CLR @FLAG
+	
+	MOV R11,R1
+	LI R0,>8002
+	BL @VDPWA
+	MOV R1,R11
+	LI R0,>81E0
+	BL @VDPWA
+
+CHAIN	
+* chain to the old int, if any (music)
+  MOV @SAVEINT,R11
+  MOV @OLDINT,R0
+  JEQ NOINT
+  B *R0
+NOINT  
+	B *R11
+	
+******************
+* get a compressed byte from a stream - stream data base in r3
+* byte is return in r0 msb
+* helper for unpack, uses r3-r6
+* r3 - streampos	(old 0)
+* r4 - streamref	(old 2)
+* r5 - streamcnt	(old 4)
+* r6 - streambase	(old 6)
+******************
+getbyte
+	mov r4,r4					* test streamref
+	jeq getb1					* not set
+	ci r4,>ffff				* test for repeat count
+	jeq getb1					* not backref
+	movb *r4+, r0			* get back-referenced byte
+	dec r5						* decrement counter
+	jne getb2					* not 0 yet
+	clr r4						* out of bytes,  clear back reference ptr
+getb2
+	b *r11						* and return
+ 
+getb1
+	mov r5,r5					* test streamcnt
+	jeq getb3					* out of bytes,  need to figure out the next set
+
+	dec r5						* count down
+	jeq getb1inc			* increment always if last byte
+	mov r4,r4					* test streamref is 0
+	jeq getb1inc			* increment if not a ref (it must have been >ffff here)
+
+* get byte with no increment
+	movb *r3,r0				* get byte from current run
+	b *r11						* and return
+
+getb1inc
+* get byte with increment
+	movb *r3+,r0			* get byte from current run
+	b *r11						* and return
+
+nostream
+	movb r5,r0				* return (r5 is expected to be zero!)
+	b *R11
+
+getb3
+* count is zero, need to get a new command
+	clr r5						* prepare r5
+	movb *r3+,r5			* get new count byte
+	jeq nostream			* was zero
+	jgt getb4					* if high bit is clear (no >80)
+
+	coc @dat40,r5			* check for 40 (indicates 2 byte reference)
+	jeq getb3double
+
+* get single byte back reference
+	andi r5, >3f00		* mask it
+	swpb r5						* store in the lsbyte
+	dec r5						* we are going to consume one byte below,  and we know it's at least 4
+	clr r4						* prepare msb
+	movb *r3+, r4			* get backref pointer
+	swpb r4						* put in correct order
+	a r6,r4						* add stream base, r4 now has the correct address
+	jmp getb3fin
+
+getb3double
+	andi r5, >3f00		* mask it
+	swpb r5						* store in the lsbyte
+	dec r5						* we are going to consume one byte below,  and we know it's at least 4
+	movb *r3+, r4			* get backref pointer (can't use mov,  might be misaligned)
+	swpb r4
+	movb *r3+, r4
+	swpb r4						* get back into correct order
+	a r6, r4					* make into a pointer (songbase and streambase are the same)
+
+getb3fin
+	movb *r4+, r0			* get back-referenced byte
+	b *r11						* and return
+
+getb4
+* >80 is not set, check for just >40
+	coc @dat40,r5
+	jeq getb5					* it's set, so go process that
+
+* neither bit is set, so it's just a plain run
+	swpb r5						* fix byte order (assumes no corruption,  lsbyte is already zero)
+	movb *r3+, r0			* get byte from current run
+	dec r5						* count down - no need to test here
+	clr r4						* make sure the streamref is zeroed
+	b *r11						* and return
+
+getb5
+* >40 is set - set up for a repeated character
+	andi r5, >3f00		* mask it
+	swpb r5						* put in the correct byte
+	dec r5						* count down the one we are going to take
+	movb *r3, r0			* get the appropriate byte - note no increment!
+	seto r4						* set the reference to >ffff
+	b *r11						* and return
+	
+******************
+* Unpack a stream to VDP
+* this is based on my audio player,
+* so does not need access to the
+* uncompressed data. Hopefully faster.
+* R0 - CPU source
+* R1 - VDP dest
+* R2 - output length (yes, you have to know)
+*
+* following are also used internally
+* r3 - streampos	(0)
+* r4 - streamref	(2)
+* r5 - streamcnt	(4)
+* r6 - streambase	(6)
+******************
+unpack
+	mov r11,@save
+	mov r0,r3			streampos
+	clr r4				streamref
+	clr r5				streamcnt
+	mov r0,r6			streambase
+	
+* TODO: not sure how many bytes to do.. it will
+* wait out the rest of the frame.
+	
+* We'll unpack xxx bytes at a time, to allow
+* for interrupts to process as needed. That
+* should be fine... 
+	
+* set VDP address - we'll need to redo this every
+* xxx chars, since the int will mess with VDP ADR
+*
+* 256 chars first try - will make the pic take 1s to unpack
+*
+unplp1
+	mov r1,@packback	* save and restore our important regs...
+	mov r2,@packback+2
+	mov r3,@packback+4
+	mov r4,@packback+6
+	mov r5,@packback+8
+	
+	li r0,1
+	bl @delay				* wait for one vblank
+
+	mov @packback,r1	* save and restore our important regs...
+	mov @packback+2,r2
+	mov @packback+4,r3
+	mov @packback+6,r4
+	mov @packback+8,r5
+
+	MOV R1,R0				* restore the address
+	ORI R0,>4000
+	BL @VDPWA
+	AI R1,>0100			* next cycle!
+	
+	mov r2,r2
+	jne unplp2			* not done
+
+	mov @save,r11		* yes done
+	B *R11
+	
+unplp2
+	bl @getbyte			* get a byte
+	movb r0,@>8C00	* write it to VDP
+	dec r2
+	czc @datff,r2		* is it a multiple of 256? (this will also give us zero detect)
+	jeq unplp1			* yes, go do an end of frame
+	jmp unplp2
+	
+******************
+* HERE WE GO	
+******************
+MSTART
+	LWPI >8300
+	BL @FILES			* make sure only 1 file
+	BL @HALFM			* Set half-multicolor mode
+
+* set interrupt, preserve the old one
+	CLR @OLDINT		* no screen int just yet
+
+* load the image, except we'll leave the very last
+* character all zeros so we can use it as a space
+
+* unpack the three files (interrupts will occur many times)
+* unpack the last 8 bytes separately so the screen stays black
+	LI R0,PICPP
+	CLR R1
+	LI R2,6144
+	BL @unpack
+	
+* now unpack the color table	
+	LI R0,PICCC
+	LI R1,>2000
+	LI R2,6144
+	BL @unpack
+	
+* now the multicolor mode data	
+	LI R0,PICMM
+	LI R1,>1800
+	LI R2,2048
+	BL @unpack
+
+* now we need to copy out the 255 chars (3 bitmap color and 1 multicolor)
+* then we'll zero them so we have a black screen
+	LI R0,>27F8
+	LI R1,CHARBUF
+	LI R2,8
+	BL @VMBR
+	
+	LI R0,>2FF8
+	LI R1,CHARBUF+8
+	LI R2,8
+	BL @VMBR
+	
+	LI R0,>37F8
+	LI R1,CHARBUF+16
+	LI R2,8
+	BL @VMBR
+	
+	LI R0,>1FF8
+	LI R1,CHARBUF+24
+	LI R2,8
+	BL @VMBR
+
+* now zero those four buffers before we turn the screen on
+	LI R0,>27F8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+	
+	LI R0,>2FF8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+	
+	LI R0,>37F8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+	
+	LI R0,>1FF8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+	
+* now that we're up, we can load the screen interrupt
+  MOV @INTFTN,@OLDINT
+	LI R1,MODE4I
+	MOV R1,@INTFTN
+
+* now, at last, we can bring a screen in an animated way
+* scrnbuf contains the actual data we want to load
+	li r0,32
+	mov r0,@animcnt
+	
+* animation loop	
+lplp	
+	dec @animcnt
+	jnc alldone				* wrapped around from zero
+	mov @animcnt,r3
+	li r4,>3800				* screen output
+	li r5,scrnbuf			* pattern buffer
+	
+scrnlp
+	mov r4,r0					* line on screen
+	a r3,r0						* to right edge
+	mov r5,r1					* line in buffer
+	li r2,32					* width of screen
+	s r3,r2						* minus the counter
+	bl @vmbw					* write the data
+	
+	ai r4,32					* next line
+	ai r5,32					* on both
+	
+	mov r4,r0					* line on screen
+	mov r5,r1					* line in buffer
+	a r3,r1						* to right edge
+	li r2,32					* width of screen
+	s r3,r2						* minus the counter
+	bl @vmbw					* write the data
+	
+	ai r4,32					* next line
+	ai r5,32					* on both
+	
+	ci r4,>3B00				* end of screen
+	jlt scrnlp				* keep working
+
+	LI R0,2						* pause 2 frames so the flicker shows
+	BL @delay					* do it
+	jmp lplp					* and do the next frame
+	
+alldone
+* now we need to copy back the '255' chars (3 bitmap color and 1 multicolor)
+	LI R0,>27F8
+	LI R1,CHARBUF
+	LI R2,8
+	BL @VMBW
+	
+	LI R0,>2FF8
+	LI R1,CHARBUF+8
+	LI R2,8
+	BL @VMBW
+	
+	LI R0,>37F8
+	LI R1,CHARBUF+16
+	LI R2,8
+	BL @VMBW
+	
+	LI R0,>1FF8
+	LI R1,CHARBUF+24
+	LI R2,8
+	BL @VMBW
+
+	LI R0,420				* pause 420 frames (7 seconds)
+	BL @delay				* do it
+	
+* now to unwind the pic we need to zero the '255' chars again
+	LI R0,>27F8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+	
+	LI R0,>2FF8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+	
+	LI R0,>37F8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+	
+	LI R0,>1FF8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+	
+* and start moving it out
+	li r0,1
+	mov r0,@animcnt
+	
+* animation loop	
+lplp2	
+	inc @animcnt
+	mov @animcnt,r3
+	ci r3,32
+	jeq alldon2				* wrapped around from zero
+	li r4,>3800				* screen output
+	li r5,scrnbuf			* pattern buffer
+	
+scrnlp2
+	mov r4,r0					* line on screen
+	a r3,r0						* to right edge
+	mov r5,r1					* line in buffer
+	li r2,32					* width of screen
+	s r3,r2						* minus the counter
+	bl @vmbwset				* write the data
+	
+	ai r4,32					* next line
+	ai r5,32					* on both
+	
+	mov r4,r0					* line on screen
+	mov r5,r1					* line in buffer
+	a r3,r1						* to right edge
+	li r2,32					* width of screen
+	s r3,r2						* minus the counter
+	bl @vmbw					* write the data
+	li r0,>FF00				* write a >FF byte
+	movb r0,@>8C00		* to VDP
+	
+	ai r4,32					* next line
+	ai r5,32					* on both
+	
+	ci r4,>3B00				* end of screen
+	jlt scrnlp2				* keep working
+
+	LI R0,2						* pause 2 frames so the flicker shows
+	BL @delay					* do it
+	jmp lplp2					* and do the next frame
+	
+alldon2
+	li r0,>3800				* make sure the screen is clear
+	li r1,>ff00
+	li r2,768
+	bl @VMBSET
+		
+dnlp
+	li R0,1
+	bl @delay					* enable quit
+	jmp dnlp					* and do the next frame
+	
+******************
+* DATA FILES GO HERE	
+******************
+
+*
+* Data file MSTEXAS.TIAC.PACK - Jul 17, 2016
+*
+
+PICCC
+ BYTE >3F,>1C,>15,>1C,>15,>1C,>15,>1C  * 00000000 ?.......
+ BYTE >15,>45,>54,>45,>54,>45,>54,>45  * 00000008 .ETETETE
+ BYTE >54,>45,>54,>45,>54,>45,>54,>45  * 00000010 TETETETE
+ BYTE >54,>45,>54,>45,>54,>45,>54,>45  * 00000018 TETETETE
+ BYTE >54,>F1,>E4,>E1,>15,>F1,>1C,>1C  * 00000020 T.......
+ BYTE >41,>FC,>FC,>C1,>41,>15,>14,>14  * 00000028 A...A...
+ BYTE >14,>15,>54,>45,>54,>15,>54,>45  * 00000030 ..TET.TE
+ BYTE >54,>1F,>FC,>FC,>F4,>E1,>41,>51  * 00000038 T.....AQ
+ BYTE >33,>41,>C5,>15,>15,>15,>45,>45  * 00000040 3A....EE
+ BYTE >45,>45,>FC,>15,>15,>15,>45,>45  * 00000048 EE....EE
+ BYTE >45,>54,>47,>45,>47,>15,>47,>45  * 00000050 ETGEG.GE
+ BYTE >45,>45,>F1,>F1,>F1,>C1,>15,>15  * 00000058 EE......
+ BYTE >15,>15,>15,>51,>51,>51,>47,>45  * 00000060 ...QQQGE
+ BYTE >45,>45,>74,>45,>45,>15,>15,>51  * 00000068 EEtEE..Q
+ BYTE >51,>51,>51,>41,>4A,>11,>3F,>41  * 00000070 QQQAJ.?A
+ BYTE >11,>11,>11,>41,>11,>41,>11,>11  * 00000078 ...A.A..
+ BYTE >11,>11,>11,>41,>11,>11,>11,>41  * 00000080 ...A...A
+ BYTE >41,>41,>11,>11,>11,>41,>11,>41  * 00000088 AA...A.A
+ BYTE >11,>41,>11,>41,>41,>14,>11,>41  * 00000090 .A.AA..A
+ BYTE >11,>14,>41,>14,>11,>41,>11,>14  * 00000098 ..A..A..
+ BYTE >41,>1D,>41,>1D,>D1,>16,>61,>D1  * 000000A0 A.A...a.
+ BYTE >61,>14,>11,>FC,>1C,>C1,>C1,>1D  * 000000A8 a.......
+ BYTE >1D,>1D,>D1,>61,>11,>16,>0D,>11  * 000000B0 ...a....
+ BYTE >16,>D1,>1D,>61,>16,>61,>16,>11  * 000000B8 ...a.a..
+ BYTE >61,>61,>16,>11,>48,>F1,>33,>6F  * 000000C0 aa..H.3o
+ BYTE >DF,>6F,>FE,>6F,>DF,>6F,>FE,>4F  * 000000C8 .o.o.o.O
+ BYTE >DF,>4F,>FE,>6F,>DF,>6F,>FE,>4F  * 000000D0 .O.o.o.O
+ BYTE >FD,>6F,>DF,>F6,>F6,>F6,>F6,>19  * 000000D8 .o......
+ BYTE >1D,>19,>1D,>19,>1D,>19,>1D,>16  * 000000E0 ........
+ BYTE >61,>16,>61,>16,>61,>16,>61,>F1  * 000000E8 a.a.a.a.
+ BYTE >F1,>F1,>E1,>F1,>F1,>F1,>E1,>15  * 000000F0 ........
+ BYTE >15,>1C,>85,>5E,>85,>09,>01,>45  * 000000F8 ...^...E
+ BYTE >86,>09,>04,>41,>41,>51,>FC,>88  * 00000100 ...AAQ..
+ BYTE >09,>0A,>14,>14,>45,>54,>14,>54  * 00000108 ....ET.T
+ BYTE >54,>54,>14,>14,>85,>2D,>0B,>14  * 00000110 TT...-..
+ BYTE >15,>54,>15,>14,>51,>1C,>E1,>A4  * 00000118 .T..Q...
+ BYTE >45,>45,>86,>09,>25,>74,>45,>45  * 00000120 EE..%tEE
+ BYTE >54,>45,>45,>45,>45,>51,>15,>15  * 00000128 TEEEEQ..
+ BYTE >13,>F1,>F1,>F1,>1F,>45,>45,>45  * 00000130 .....EEE
+ BYTE >45,>51,>51,>51,>AC,>45,>45,>45  * 00000138 EQQQ.EEE
+ BYTE >45,>51,>15,>31,>FC,>45,>45,>54  * 00000140 EQ.1.EET
+ BYTE >15,>51,>86,>87,>86,>82,>88,>80  * 00000148 .Q......
+ BYTE >88,>8C,>85,>86,>02,>41,>41,>87  * 00000150 .....AA.
+ BYTE >8F,>11,>41,>41,>41,>41,>41,>14  * 00000158 ..AAAAA.
+ BYTE >41,>14,>41,>14,>14,>41,>41,>41  * 00000160 A.A..AAA
+ BYTE >41,>14,>11,>89,>95,>1B,>41,>41  * 00000168 A.....AA
+ BYTE >11,>41,>41,>61,>11,>61,>41,>D1  * 00000170 .AAa.aA.
+ BYTE >41,>D1,>11,>41,>11,>1D,>1D,>D1  * 00000178 A..A....
+ BYTE >61,>1D,>D1,>D1,>41,>61,>11,>61  * 00000180 a...Aa.a
+ BYTE >11,>8C,>EB,>88,>C7,>88,>C7,>08  * 00000188 ........
+ BYTE >F6,>F6,>F6,>6F,>F6,>F6,>F6,>6F  * 00000190 ...o...o
+ BYTE >91,>DF,>03,>E1,>F1,>F1,>86,>F3  * 00000198 ........
+ BYTE >46,>15,>03,>45,>45,>45,>C5,>01  * 000001A0 F..EEE..
+ BYTE >26,>3F,>1E,>F4,>FC,>F4,>1E,>F1  * 000001A8 &?......
+ BYTE >F1,>F5,>11,>B1,>A1,>F1,>1F,>EF  * 000001B0 ........
+ BYTE >6F,>5F,>41,>14,>FC,>F4,>FC,>F1  * 000001B8 o_A.....
+ BYTE >C1,>14,>15,>14,>15,>14,>15,>54  * 000001C0 .......T
+ BYTE >F4,>4F,>13,>FC,>13,>FC,>1F,>1E  * 000001C8 .O......
+ BYTE >1E,>1E,>13,>FC,>13,>14,>F4,>F4  * 000001D0 ........
+ BYTE >E1,>E1,>45,>54,>45,>54,>51,>1C  * 000001D8 ..ETETQ.
+ BYTE >FC,>1F,>F1,>1E,>F1,>1E,>F1,>FE  * 000001E0 ........
+ BYTE >4F,>11,>FE,>F1,>4F,>F1,>1E,>1F  * 000001E8 O...O...
+ BYTE >F1,>F1,>1E,>1C,>14,>14,>41,>15  * 000001F0 ......A.
+ BYTE >14,>14,>51,>88,>8D,>86,>79,>01  * 000001F8 ..Q...y.
+ BYTE >14,>C5,>01,>6E,>03,>14,>41,>14  * 00000200 ...n..A.
+ BYTE >C5,>01,>5C,>03,>41,>11,>14,>87  * 00000208 ..\.A...
+ BYTE >92,>04,>41,>11,>14,>41,>86,>85  * 00000210 ..A..A..
+ BYTE >01,>14,>87,>80,>86,>81,>5A,>11  * 00000218 ......Z.
+ BYTE >10,>D1,>41,>D1,>41,>D1,>41,>14  * 00000220 ..A.A.A.
+ BYTE >14,>16,>61,>16,>61,>61,>61,>D1  * 00000228 ..a.aaa.
+ BYTE >61,>85,>F1,>04,>F1,>F1,>F1,>4F  * 00000230 a......O
+ BYTE >8B,>CC,>04,>6F,>DF,>6F,>FE,>C5  * 00000238 ...o.o..
+ BYTE >01,>90,>0B,>6F,>F6,>6F,>19,>1D  * 00000240 ...o.o..
+ BYTE >1D,>1D,>19,>1D,>19,>16,>85,>E7  * 00000248 ........
+ BYTE >01,>16,>85,>ED,>05,>31,>F1,>E1  * 00000250 .....1..
+ BYTE >F1,>31,>48,>15,>3A,>45,>E5,>F5  * 00000258 .1H.:E..
+ BYTE >45,>45,>45,>45,>45,>1F,>1F,>1F  * 00000260 EEEEE...
+ BYTE >1E,>F1,>F1,>F1,>15,>FC,>1F,>F4  * 00000268 ........
+ BYTE >DF,>1F,>FE,>6F,>1E,>45,>54,>15  * 00000270 ...o.ET.
+ BYTE >54,>41,>31,>A1,>B1,>FC,>4F,>13  * 00000278 TA1...O.
+ BYTE >41,>14,>41,>41,>11,>CF,>EC,>E1  * 00000280 A.AA....
+ BYTE >11,>1D,>41,>11,>41,>D1,>E1,>D1  * 00000288 ..A.A...
+ BYTE >E1,>D1,>11,>11,>11,>F1,>51,>86  * 00000290 ......Q.
+ BYTE >77,>0F,>CF,>CF,>F1,>1E,>FC,>FC  * 00000298 w.......
+ BYTE >F1,>C1,>F1,>1E,>F1,>1E,>FC,>C1  * 000002A0 ........
+ BYTE >C1,>C6,>01,>59,>02,>E1,>D1,>86  * 000002A8 ...Y....
+ BYTE >82,>89,>96,>03,>41,>11,>14,>87  * 000002B0 ....A...
+ BYTE >7A,>86,>8D,>88,>79,>8C,>77,>3F  * 000002B8 z...y.w?
+ BYTE >11,>11,>11,>11,>61,>69,>11,>11  * 000002C0 ....ai..
+ BYTE >11,>11,>61,>61,>1B,>EF,>11,>11  * 000002C8 ..aa....
+ BYTE >61,>16,>31,>13,>CF,>FE,>11,>16  * 000002D0 a.1.....
+ BYTE >B6,>9B,>19,>B6,>1F,>F9,>41,>11  * 000002D8 ......A.
+ BYTE >11,>61,>61,>E1,>F6,>F9,>1D,>14  * 000002E0 .aa.....
+ BYTE >1D,>14,>D1,>41,>41,>61,>16,>16  * 000002E8 ...AAa..
+ BYTE >16,>46,>16,>46,>16,>16,>F1,>F1  * 000002F0 .F.F....
+ BYTE >F1,>71,>F1,>F1,>F1,>E1,>4F,>02  * 000002F8 .q....O.
+ BYTE >DF,>4F,>89,>CE,>14,>6F,>DF,>6F  * 00000300 .O...o.o
+ BYTE >FE,>F6,>6F,>F6,>6F,>F6,>6F,>F6  * 00000308 ..o.o.o.
+ BYTE >6F,>1D,>16,>16,>16,>16,>61,>16  * 00000310 o.....a.
+ BYTE >16,>89,>E7,>07,>E1,>F1,>51,>F1  * 00000318 ......Q.
+ BYTE >51,>16,>41,>48,>15,>85,>09,>1D  * 00000320 Q.AH....
+ BYTE >45,>45,>54,>31,>41,>1C,>31,>E4  * 00000328 EET1A.1.
+ BYTE >D4,>54,>54,>F5,>E4,>14,>D1,>41  * 00000330 .TT....A
+ BYTE >41,>41,>14,>F1,>51,>11,>11,>41  * 00000338 AA..Q..A
+ BYTE >11,>14,>14,>11,>11,>C5,>01,>5D  * 00000340 .......]
+ BYTE >08,>14,>D1,>11,>41,>E4,>F4,>54  * 00000348 ....A..T
+ BYTE >14,>85,>7D,>04,>41,>14,>14,>14  * 00000350 ..}.A...
+ BYTE >86,>7F,>03,>14,>41,>51,>C9,>01  * 00000358 ....AQ..
+ BYTE >5C,>02,>14,>41,>87,>8D,>86,>82  * 00000360 \..A....
+ BYTE >8B,>7C,>59,>11,>2E,>61,>61,>61  * 00000368 .|Y..aaa
+ BYTE >61,>61,>19,>6B,>B1,>1C,>F1,>CE  * 00000370 aa.k....
+ BYTE >B1,>1E,>1F,>FE,>1F,>DF,>1F,>FD  * 00000378 ........
+ BYTE >1F,>FD,>1F,>FD,>4F,>DF,>4F,>FE  * 00000380 ....O.O.
+ BYTE >1F,>DF,>4F,>FE,>6F,>9F,>6F,>FB  * 00000388 ..O.o.o.
+ BYTE >4F,>DF,>4F,>FE,>4F,>DF,>DF,>FE  * 00000390 O.O.O...
+ BYTE >F1,>1E,>4F,>85,>CE,>08,>16,>16  * 00000398 ..O.....
+ BYTE >16,>F1,>41,>F1,>F1,>F1,>48,>16  * 000003A0 ..A...H.
+ BYTE >87,>EF,>0A,>71,>6F,>EF,>6F,>FE  * 000003A8 ...qo.o.
+ BYTE >6F,>EF,>6F,>FE,>6F,>C5,>03,>91  * 000003B0 o.o.o...
+ BYTE >01,>4F,>CA,>03,>08,>01,>1D,>85  * 000003B8 .O......
+ BYTE >BA,>87,>E8,>0A,>16,>61,>16,>D1  * 000003C0 .....a..
+ BYTE >61,>41,>16,>61,>16,>61,>49,>45  * 000003C8 aA.a.aIE
+ BYTE >8F,>0A,>03,>15,>54,>14,>C5,>01  * 000003D0 ....T...
+ BYTE >61,>0B,>14,>14,>15,>14,>14,>11  * 000003D8 a.......
+ BYTE >11,>11,>14,>14,>14,>85,>7D,>01  * 000003E0 ......}.
+ BYTE >41,>C5,>03,>DD,>03,>11,>11,>14  * 000003E8 A.......
+ BYTE >85,>88,>04,>11,>11,>14,>41,>86  * 000003F0 ......A.
+ BYTE >8F,>86,>7D,>56,>11,>86,>7B,>01  * 000003F8 ..}V..{.
+ BYTE >41,>85,>86,>87,>8D,>86,>82,>15  * 00000400 A.......
+ BYTE >11,>61,>61,>61,>C1,>A1,>1D,>F1  * 00000408 .aaa....
+ BYTE >13,>F1,>13,>1F,>6B,>1F,>DB,>1F  * 00000410 ....k...
+ BYTE >FD,>1F,>BD,>1F,>DF,>C6,>03,>82  * 00000418 ........
+ BYTE >85,>C7,>02,>9F,>6F,>C5,>03,>8B  * 00000420 ....o...
+ BYTE >0F,>6F,>9F,>6F,>FB,>6F,>9F,>6F  * 00000428 .o.o.o.o
+ BYTE >FB,>6F,>9F,>6F,>FB,>6F,>9F,>6F  * 00000430 .o.o.o.o
+ BYTE >C5,>03,>8B,>08,>F1,>E1,>F1,>F1  * 00000438 ........
+ BYTE >F6,>F1,>F6,>F1,>48,>16,>03,>F1  * 00000440 ....H...
+ BYTE >F1,>F1,>C5,>02,>55,>C9,>03,>AC  * 00000448 ....U...
+ BYTE >87,>C8,>08,>F6,>6F,>F6,>6F,>6F  * 00000450 ....o.oo
+ BYTE >6F,>6F,>6F,>88,>E7,>88,>E7,>01  * 00000458 ooo.....
+ BYTE >61,>86,>E8,>01,>11,>4B,>45,>04  * 00000460 a....KE.
+ BYTE >54,>45,>54,>54,>87,>0A,>19,>15  * 00000468 TETT....
+ BYTE >54,>14,>14,>41,>41,>14,>41,>41  * 00000470 T..AA.AA
+ BYTE >41,>14,>E4,>F4,>D1,>11,>11,>D1  * 00000478 A.......
+ BYTE >D1,>11,>D1,>41,>11,>11,>D1,>D1  * 00000480 ...A....
+ BYTE >49,>11,>10,>41,>41,>41,>11,>41  * 00000488 I..AAA.A
+ BYTE >11,>D1,>1D,>41,>11,>11,>11,>D1  * 00000490 ...A....
+ BYTE >E4,>FD,>FE,>85,>7F,>03,>D1,>41  * 00000498 .......A
+ BYTE >D1,>85,>7F,>85,>88,>87,>81,>8A  * 000004A0 ........
+ BYTE >90,>01,>11,>C5,>04,>73,>C6,>01  * 000004A8 .....s..
+ BYTE >59,>19,>11,>61,>61,>61,>61,>91  * 000004B0 Y..aaaa.
+ BYTE >61,>B1,>61,>F1,>1E,>1F,>BC,>1F  * 000004B8 a.a.....
+ BYTE >CB,>1F,>BC,>1F,>FD,>1F,>ED,>1F  * 000004C0 ........
+ BYTE >FD,>1F,>ED,>88,>CF,>03,>6F,>9F  * 000004C8 ......o.
+ BYTE >6F,>C5,>03,>8B,>CF,>04,>29,>C5  * 000004D0 o.....).
+ BYTE >03,>8B,>0C,>CF,>F3,>F1,>E1,>F6  * 000004D8 ........
+ BYTE >F6,>F6,>F6,>B1,>C1,>1F,>1F,>C5  * 000004E0 ........
+ BYTE >03,>14,>0C,>16,>16,>16,>F1,>E1  * 000004E8 ........
+ BYTE >F1,>71,>F1,>1D,>E1,>16,>4F,>87  * 000004F0 .q....O.
+ BYTE >C8,>88,>C7,>47,>6F,>01,>DF,>88  * 000004F8 ...Go...
+ BYTE >E7,>87,>E7,>01,>11,>87,>E7,>01  * 00000500 ........
+ BYTE >11,>48,>45,>0B,>54,>54,>54,>54  * 00000508 .HE.TTTT
+ BYTE >45,>45,>54,>54,>15,>14,>41,>C5  * 00000510 EETT..A.
+ BYTE >01,>6E,>86,>7D,>01,>11,>C5,>04  * 00000518 .n.}....
+ BYTE >81,>17,>11,>41,>E1,>F1,>11,>11  * 00000520 ...A....
+ BYTE >41,>1D,>F1,>FC,>A1,>A1,>11,>11  * 00000528 A.......
+ BYTE >41,>E1,>61,>A1,>A1,>11,>F1,>E1  * 00000530 A.a.....
+ BYTE >14,>C5,>02,>80,>0C,>DF,>ED,>1D  * 00000538 ........
+ BYTE >ED,>1D,>D1,>E1,>41,>41,>D1,>D1  * 00000540 ....AA..
+ BYTE >D1,>86,>81,>89,>8B,>89,>8C,>C7  * 00000548 ........
+ BYTE >01,>5D,>C5,>01,>6E,>86,>7D,>0E  * 00000550 .]..n.}.
+ BYTE >11,>11,>B1,>B1,>B1,>19,>91,>16  * 00000558 ........
+ BYTE >B1,>16,>1F,>CB,>1F,>AC,>C5,>04  * 00000560 ........
+ BYTE >BF,>17,>DF,>1F,>91,>1E,>1C,>1F  * 00000568 ........
+ BYTE >CE,>CF,>3F,>1B,>11,>41,>EC,>1E  * 00000570 ..?..A..
+ BYTE >C1,>5F,>DF,>1E,>11,>F1,>16,>1F  * 00000578 ._......
+ BYTE >1E,>C6,>03,>8C,>1B,>1F,>FD,>4F  * 00000580 .......O
+ BYTE >DF,>FD,>F9,>4F,>DF,>FD,>1E,>F1  * 00000588 ...O....
+ BYTE >EC,>B1,>E1,>91,>E1,>FC,>F6,>1F  * 00000590 ........
+ BYTE >1E,>31,>11,>61,>F1,>F1,>1F,>16  * 00000598 .1.a....
+ BYTE >47,>61,>08,>F1,>1D,>1E,>E6,>F1  * 000005A0 Ga......
+ BYTE >1D,>F1,>E6,>8C,>CB,>85,>C7,>07  * 000005A8 ........
+ BYTE >9F,>6F,>DF,>6F,>9F,>6F,>DF,>88  * 000005B0 .o.o.o..
+ BYTE >E7,>08,>16,>11,>16,>11,>16,>61  * 000005B8 .......a
+ BYTE >16,>11,>88,>E7,>08,>14,>41,>51  * 000005C0 ......AQ
+ BYTE >14,>45,>54,>45,>54,>86,>83,>02  * 000005C8 .ETET...
+ BYTE >14,>14,>87,>83,>85,>7D,>08,>41  * 000005D0 .....}.A
+ BYTE >11,>11,>41,>D1,>41,>D1,>E1,>86  * 000005D8 ..A.A...
+ BYTE >7D,>7F,>11,>57,>11,>36,>A1,>61  * 000005E0 }..W.6.a
+ BYTE >91,>61,>A1,>16,>B1,>A1,>1B,>A6  * 000005E8 .a......
+ BYTE >1B,>AC,>1B,>CA,>1B,>AC,>1A,>16  * 000005F0 ........
+ BYTE >1B,>A6,>1B,>CA,>CF,>BA,>1F,>A6  * 000005F8 ........
+ BYTE >1B,>A6,>1B,>6A,>1F,>CB,>4F,>6B  * 00000600 ...j..Ok
+ BYTE >1F,>A6,>1F,>6B,>1F,>6B,>4F,>DF  * 00000608 ...k.kO.
+ BYTE >1F,>BD,>1F,>DB,>1F,>F9,>1F,>6B  * 00000610 .......k
+ BYTE >1F,>B6,>1F,>6B,>C5,>03,>7E,>07  * 00000618 ...k..~.
+ BYTE >1B,>1F,>FC,>1F,>6B,>1F,>6B,>C9  * 00000620 ....k.k.
+ BYTE >06,>10,>2E,>F9,>4F,>DF,>4F,>F9  * 00000628 ....O.O.
+ BYTE >1F,>6B,>1F,>F9,>1F,>F9,>1F,>B6  * 00000630 .k......
+ BYTE >4F,>B6,>1F,>B6,>1F,>B6,>1F,>6B  * 00000638 O......k
+ BYTE >F4,>B6,>1F,>B6,>1F,>6B,>1F,>B6  * 00000640 .....k..
+ BYTE >16,>16,>CF,>FB,>1F,>B6,>1F,>B6  * 00000648 ........
+ BYTE >16,>61,>16,>1B,>1F,>6B,>1F,>6B  * 00000650 .a...k.k
+ BYTE >1D,>C5,>03,>14,>02,>1F,>FA,>49  * 00000658 .......I
+ BYTE >45,>87,>0A,>1E,>41,>41,>14,>14  * 00000660 E...AA..
+ BYTE >15,>54,>15,>54,>41,>41,>14,>14  * 00000668 .T.TAA..
+ BYTE >14,>14,>54,>54,>1A,>A1,>C1,>41  * 00000670 ..TT...A
+ BYTE >41,>41,>14,>14,>14,>14,>41,>11  * 00000678 AA....A.
+ BYTE >14,>14,>C6,>04,>71,>C6,>06,>7A  * 00000680 ....q..z
+ BYTE >01,>41,>C6,>01,>59,>C5,>04,>8C  * 00000688 .A..Y...
+ BYTE >86,>91,>88,>8B,>01,>14,>C5,>01  * 00000690 ........
+ BYTE >6E,>C5,>04,>75,>C7,>01,>5A,>02  * 00000698 n..u..Z.
+ BYTE >41,>41,>86,>87,>4A,>11,>3F,>1B  * 000006A0 AA..J.?.
+ BYTE >1B,>F1,>1D,>F1,>1B,>F1,>19,>1F  * 000006A8 ........
+ BYTE >CE,>1F,>CE,>1B,>CE,>1F,>F3,>FD  * 000006B0 ........
+ BYTE >1D,>E1,>D1,>E1,>D1,>1D,>4E,>61  * 000006B8 ......Na
+ BYTE >61,>F4,>F6,>F1,>1E,>1D,>EC,>F1  * 000006C0 a.......
+ BYTE >E1,>F1,>FC,>1B,>A1,>1F,>6B,>1F  * 000006C8 ......k.
+ BYTE >DF,>1F,>DE,>1F,>FD,>1F,>BD,>F6  * 000006D0 ........
+ BYTE >FD,>F6,>9F,>6F,>9F,>6F,>FB,>F1  * 000006D8 ...o.o..
+ BYTE >C1,>1E,>EC,>1F,>9F,>6F,>11,>FB  * 000006E0 .....o..
+ BYTE >F1,>1B,>6F,>BF,>6F,>9F,>6F,>FB  * 000006E8 ..o.o.o.
+ BYTE >61,>61,>61,>61,>61,>F1,>B1,>F1  * 000006F0 aaaaa...
+ BYTE >C5,>04,>EE,>03,>F1,>F1,>71,>C6  * 000006F8 ......q.
+ BYTE >03,>90,>86,>D1,>85,>C7,>01,>FE  * 00000700 ........
+ BYTE >C6,>05,>B1,>88,>E7,>88,>E7,>88  * 00000708 ........
+ BYTE >E7,>49,>45,>87,>0A,>0A,>15,>54  * 00000710 .IE....T
+ BYTE >45,>F4,>13,>FC,>FC,>F4,>14,>14  * 00000718 E.......
+ BYTE >C5,>01,>27,>01,>F5,>C5,>03,>DA  * 00000720 ..'.....
+ BYTE >06,>14,>15,>E4,>14,>14,>14,>C5  * 00000728 ........
+ BYTE >06,>6D,>06,>14,>41,>41,>D1,>F4  * 00000730 .m..AA..
+ BYTE >D1,>C6,>04,>8B,>87,>8D,>86,>92  * 00000738 ........
+ BYTE >C5,>04,>8C,>85,>91,>C9,>01,>5A  * 00000740 .......Z
+ BYTE >01,>D1,>C5,>01,>64,>85,>88,>85  * 00000748 ....d...
+ BYTE >7E,>04,>61,>61,>61,>16,>C6,>02  * 00000750 ~.aaa...
+ BYTE >C6,>0A,>16,>96,>1B,>6B,>1B,>69  * 00000758 .....k.i
+ BYTE >1B,>69,>1B,>16,>C5,>04,>C3,>1B  * 00000760 .i......
+ BYTE >DE,>1F,>ED,>1B,>6B,>6F,>F9,>6F  * 00000768 ....ko.o
+ BYTE >9F,>6F,>FB,>19,>B6,>6F,>F9,>6F  * 00000770 .o...o.o
+ BYTE >9F,>6F,>FB,>1F,>F9,>6F,>F9,>6F  * 00000778 .o...o.o
+ BYTE >9F,>6F,>FB,>C5,>06,>D1,>06,>DF  * 00000780 .o......
+ BYTE >1F,>FD,>6F,>9F,>6F,>C5,>03,>8B  * 00000788 ..o.o...
+ BYTE >CF,>04,>29,>11,>FB,>D1,>F1,>E1  * 00000790 ..).....
+ BYTE >F1,>D1,>F1,>D1,>F1,>F1,>E1,>F1  * 00000798 ........
+ BYTE >E1,>F1,>E1,>F1,>E1,>C9,>03,>AC  * 000007A0 ........
+ BYTE >85,>C8,>85,>D1,>05,>6F,>6F,>6F  * 000007A8 .....ooo
+ BYTE >6F,>6F,>88,>E7,>88,>E7,>88,>E7  * 000007B0 oo......
+ BYTE >49,>45,>C6,>01,>DB,>1A,>A4,>1E  * 000007B8 IE......
+ BYTE >15,>1E,>F5,>F1,>DF,>6F,>FE,>31  * 000007C0 .....o.1
+ BYTE >13,>FC,>13,>1E,>13,>F1,>1E,>FC  * 000007C8 ........
+ BYTE >FC,>C1,>C1,>15,>54,>15,>54,>14  * 000007D0 ....T.T.
+ BYTE >C5,>06,>6E,>05,>1D,>14,>14,>14  * 000007D8 ..n.....
+ BYTE >1D,>C5,>06,>B8,>4D,>41,>C6,>01  * 000007E0 ....MA..
+ BYTE >59,>85,>90,>01,>D1,>46,>41,>02  * 000007E8 Y....FA.
+ BYTE >11,>D1,>4F,>11,>07,>91,>16,>B1  * 000007F0 ..O.....
+ BYTE >19,>B1,>16,>B1,>85,>E8,>19,>1A  * 000007F8 ........
+ BYTE >CB,>CF,>CE,>91,>61,>61,>61,>16  * 00000800 ....aaa.
+ BYTE >61,>16,>B1,>CF,>CE,>1F,>6B,>1F  * 00000808 a.....k.
+ BYTE >B6,>1B,>A6,>6F,>DF,>6F,>F9,>1F  * 00000810 ...o.o..
+ BYTE >C6,>07,>87,>03,>FB,>6F,>9F,>C6  * 00000818 .....o..
+ BYTE >07,>6D,>C5,>08,>13,>07,>BD,>1F  * 00000820 .m......
+ BYTE >96,>CF,>CE,>CF,>FC,>C7,>04,>29  * 00000828 .......)
+ BYTE >C5,>07,>6E,>0E,>6F,>9F,>6F,>F9  * 00000830 ..n.o.o.
+ BYTE >6F,>EF,>6F,>FE,>4F,>DF,>F4,>1F  * 00000838 o.o.O...
+ BYTE >16,>91,>46,>61,>86,>F1,>02,>F1  * 00000840 ..Fa....
+ BYTE >F1,>C8,>03,>AC,>C6,>03,>90,>02  * 00000848 ........
+ BYTE >4F,>FE,>46,>6F,>02,>F6,>6F,>88  * 00000850 O.Fo..o.
+ BYTE >E7,>88,>E7,>88,>E7,>C5,>01,>27  * 00000858 .......'
+ BYTE >04,>54,>45,>54,>F4,>87,>0A,>17  * 00000860 .TET....
+ BYTE >1F,>1E,>F1,>E1,>1E,>F4,>E1,>14  * 00000868 ........
+ BYTE >F1,>FD,>1F,>FD,>6F,>1C,>51,>41  * 00000870 ....o.QA
+ BYTE >15,>54,>15,>F4,>C1,>A1,>31,>C5  * 00000878 .T....1.
+ BYTE >04,>74,>86,>7F,>88,>8D,>87,>8D  * 00000880 .t......
+ BYTE >02,>11,>14,>C6,>01,>59,>85,>88  * 00000888 .....Y..
+ BYTE >4E,>11,>86,>7D,>46,>11,>03,>B1  * 00000890 N..}F...
+ BYTE >61,>61,>85,>7E,>28,>1F,>CE,>1F  * 00000898 aa.~(...
+ BYTE >1A,>16,>11,>11,>11,>19,>A1,>16  * 000008A0 ........
+ BYTE >61,>19,>16,>16,>61,>1B,>B6,>1B  * 000008A8 a...a...
+ BYTE >A6,>1B,>B6,>1B,>96,>CF,>CB,>1F  * 000008B0 ........
+ BYTE >6B,>1F,>6B,>1F,>6A,>4F,>DF,>4F  * 000008B8 k.k.jO.O
+ BYTE >FD,>1F,>DF,>1F,>BD,>C6,>03,>90  * 000008C0 ........
+ BYTE >06,>4F,>FD,>F1,>CB,>CF,>FE,>C5  * 000008C8 .O......
+ BYTE >08,>BD,>02,>6E,>1F,>85,>CE,>10  * 000008D0 ...n....
+ BYTE >4F,>DF,>4F,>FE,>DF,>DF,>4F,>FE  * 000008D8 O.O...O.
+ BYTE >F4,>1F,>1F,>1F,>1F,>F6,>F6,>1F  * 000008E0 ........
+ BYTE >47,>61,>03,>16,>F1,>F1,>85,>EF  * 000008E8 Ga......
+ BYTE >01,>E1,>C8,>03,>AC,>C6,>03,>90  * 000008F0 ........
+ BYTE >01,>4F,>C9,>03,>08,>88,>E7,>88  * 000008F8 .O......
+ BYTE >E7,>88,>E7,>05,>45,>54,>45,>14  * 00000900 ....ETE.
+ BYTE >54,>85,>0A,>0B,>14,>14,>14,>54  * 00000908 T......T
+ BYTE >45,>14,>F4,>E4,>15,>54,>14,>85  * 00000910 E....T..
+ BYTE >2E,>05,>15,>14,>14,>54,>51,>C5  * 00000918 .....TQ.
+ BYTE >01,>64,>4C,>11,>86,>8F,>C5,>04  * 00000920 .dL.....
+ BYTE >73,>87,>7C,>76,>11,>0C,>91,>61  * 00000928 s.|v...a
+ BYTE >61,>11,>91,>91,>61,>61,>1B,>CA  * 00000930 a...aa..
+ BYTE >1F,>CB,>C5,>04,>BF,>03,>6B,>1F  * 00000938 ......k.
+ BYTE >B6,>C5,>04,>BF,>07,>F9,>1F,>BD  * 00000940 ........
+ BYTE >1F,>F9,>1F,>B6,>C5,>03,>80,>1D  * 00000948 ........
+ BYTE >F9,>1F,>B6,>1F,>FD,>1F,>ED,>4F  * 00000950 .......O
+ BYTE >B6,>1F,>E5,>4F,>DF,>1F,>96,>1B  * 00000958 ...O....
+ BYTE >4E,>4F,>DE,>4F,>DF,>1F,>69,>1B  * 00000960 NO.O..i.
+ BYTE >1D,>1F,>FE,>F1,>1E,>46,>F1,>06  * 00000968 .....F..
+ BYTE >81,>16,>81,>16,>16,>16,>C5,>02  * 00000970 ........
+ BYTE >F4,>85,>F2,>C8,>03,>AC,>C6,>03  * 00000978 ........
+ BYTE >90,>01,>4F,>C9,>03,>08,>88,>E7  * 00000980 ..O.....
+ BYTE >88,>E7,>12,>16,>61,>16,>61,>18  * 00000988 ....a.a.
+ BYTE >61,>16,>61,>15,>14,>14,>41,>14  * 00000990 a.a...A.
+ BYTE >14,>51,>41,>45,>54,>C5,>03,>DC  * 00000998 .QAET...
+ BYTE >01,>41,>C5,>06,>7B,>85,>84,>4E  * 000009A0 .A..{..N
+ BYTE >11,>01,>41,>85,>86,>01,>41,>87  * 000009A8 ..A...A.
+ BYTE >86,>7F,>11,>06,>11,>11,>11,>91  * 000009B0 ........
+ BYTE >61,>61,>85,>7E,>0C,>1B,>1A,>1B  * 000009B8 aa.~....
+ BYTE >16,>1B,>19,>19,>16,>1F,>CB,>CF  * 000009C0 ........
+ BYTE >B3,>C5,>04,>BF,>01,>6B,>C5,>08  * 000009C8 .....k..
+ BYTE >B7,>1B,>6B,>1F,>DE,>1F,>6B,>1F  * 000009D0 ..k...k.
+ BYTE >BD,>1F,>BD,>1F,>DE,>1F,>9D,>1B  * 000009D8 ........
+ BYTE >B6,>CF,>F3,>1F,>F9,>6F,>F9,>4F  * 000009E0 .....o.O
+ BYTE >6B,>1F,>FE,>4F,>FD,>C6,>03,>86  * 000009E8 k..O....
+ BYTE >10,>F1,>E1,>31,>F1,>1F,>AF,>6F  * 000009F0 ...1...o
+ BYTE >FB,>16,>16,>16,>F6,>F1,>1F,>1F  * 000009F8 ........
+ BYTE >4F,>88,>EF,>C8,>03,>AC,>C6,>03  * 00000A00 O.......
+ BYTE >90,>01,>4F,>C9,>03,>08,>88,>E7  * 00000A08 ..O.....
+ BYTE >88,>E7,>0F,>1D,>16,>1D,>61,>1D  * 00000A10 ......a.
+ BYTE >16,>16,>61,>41,>14,>14,>54,>45  * 00000A18 ..aA..TE
+ BYTE >54,>15,>C5,>01,>64,>01,>41,>85  * 00000A20 T...d.A.
+ BYTE >87,>06,>41,>11,>11,>11,>14,>41  * 00000A28 ..A....A
+ BYTE >87,>81,>09,>11,>D1,>D1,>D1,>41  * 00000A30 .......A
+ BYTE >D1,>E1,>13,>1C,>85,>84,>01,>D1  * 00000A38 ........
+ BYTE >85,>88,>7F,>11,>4E,>11,>21,>19  * 00000A40 ....N.!.
+ BYTE >16,>A1,>16,>A1,>16,>91,>61,>1F  * 00000A48 ......a.
+ BYTE >1A,>1B,>16,>19,>16,>1A,>C6,>CF  * 00000A50 ........
+ BYTE >CB,>1F,>AC,>CF,>6B,>1B,>16,>1F  * 00000A58 ....k...
+ BYTE >F9,>1F,>BD,>1F,>6B,>1F,>96,>1F  * 00000A60 ....k...
+ BYTE >C5,>03,>91,>C6,>03,>82,>C6,>03  * 00000A68 ........
+ BYTE >90,>25,>F1,>F6,>1F,>6F,>1F,>F9  * 00000A70 .%...o..
+ BYTE >CF,>CF,>1F,>BC,>1F,>AC,>1B,>B3  * 00000A78 ........
+ BYTE >DF,>EF,>6F,>6F,>CF,>EC,>E1,>CB  * 00000A80 ..oo....
+ BYTE >F1,>F1,>F1,>1F,>1F,>1F,>F1,>6A  * 00000A88 .......j
+ BYTE >6F,>DF,>6F,>FE,>DF,>EF,>DF,>85  * 00000A90 o.o.....
+ BYTE >CE,>03,>4F,>DF,>4F,>C9,>03,>08  * 00000A98 ..O.O...
+ BYTE >88,>E7,>88,>E7,>85,>E7,>07,>16  * 00000AA0 ........
+ BYTE >16,>61,>15,>14,>15,>54,>C5,>03  * 00000AA8 .a...T..
+ BYTE >DA,>01,>14,>85,>2D,>C5,>01,>5F  * 00000AB0 ....-.._
+ BYTE >1C,>41,>14,>14,>14,>41,>E1,>F4  * 00000AB8 .A...A..
+ BYTE >E4,>F1,>41,>14,>41,>31,>E1,>F1  * 00000AC0 ..A.A1..
+ BYTE >13,>1F,>13,>C1,>F1,>C1,>C1,>C1  * 00000AC8 ........
+ BYTE >F1,>E1,>E1,>F1,>D1,>48,>11,>04  * 00000AD0 .....H..
+ BYTE >D1,>E1,>E1,>E1,>86,>7D,>56,>11  * 00000AD8 .....}V.
+ BYTE >3C,>F1,>F1,>F1,>91,>11,>11,>61  * 00000AE0 <......a
+ BYTE >61,>1F,>DF,>1F,>41,>61,>11,>61  * 00000AE8 a...Aa.a
+ BYTE >86,>6F,>BF,>1F,>61,>51,>41,>14  * 00000AF0 .o..aQA.
+ BYTE >61,>DF,>EF,>1E,>F1,>B1,>41,>F1  * 00000AF8 a.....A.
+ BYTE >B1,>DF,>EF,>1F,>11,>F1,>A1,>14  * 00000B00 ........
+ BYTE >F1,>DF,>EF,>1F,>11,>E1,>1B,>F1  * 00000B08 ........
+ BYTE >61,>6F,>EF,>6F,>1F,>F1,>1F,>F6  * 00000B10 ao.o....
+ BYTE >1F,>6F,>EF,>6F,>F6,>C5,>04,>53  * 00000B18 .o.o...S
+ BYTE >13,>EF,>6F,>F6,>F6,>F6,>F6,>F6  * 00000B20 ..o.....
+ BYTE >6F,>EF,>DF,>F6,>F6,>6E,>1F,>DF  * 00000B28 o....n..
+ BYTE >1F,>BF,>DF,>EF,>C5,>03,>7E,>27  * 00000B30 ......~'
+ BYTE >F9,>DF,>EF,>1F,>96,>1F,>96,>1F  * 00000B38 ........
+ BYTE >6B,>DF,>1F,>4F,>69,>1F,>96,>1F  * 00000B40 k..Oi...
+ BYTE >6B,>4F,>FE,>1F,>F9,>1F,>AF,>1F  * 00000B48 kO......
+ BYTE >9F,>DF,>EF,>6F,>9F,>F6,>F6,>1F  * 00000B50 ...o....
+ BYTE >F6,>F1,>E6,>1F,>E6,>1F,>E9,>C9  * 00000B58 ........
+ BYTE >04,>29,>17,>BF,>6F,>FB,>4F,>6B  * 00000B60 .)..o.Ok
+ BYTE >1F,>B6,>F6,>6F,>6F,>FB,>4F,>6B  * 00000B68 ...oo.Ok
+ BYTE >F6,>CF,>1B,>A6,>1B,>A6,>1B,>B6  * 00000B70 ........
+ BYTE >1A,>16,>C5,>08,>B7,>04,>6B,>1F  * 00000B78 ......k.
+ BYTE >6B,>15,>87,>0A,>51,>14,>C5,>06  * 00000B80 k...Q...
+ BYTE >6D,>0F,>14,>14,>F4,>1E,>F1,>D1  * 00000B88 m.......
+ BYTE >F1,>E1,>41,>41,>E1,>E1,>41,>41  * 00000B90 ..AA..AA
+ BYTE >41,>C5,>01,>6E,>03,>51,>51,>41  * 00000B98 A..n.QQA
+ BYTE >86,>87,>4F,>11,>09,>61,>61,>61  * 00000BA0 ..O..aaa
+ BYTE >16,>16,>16,>61,>41,>D1,>C5,>02  * 00000BA8 ...aA...
+ BYTE >2A,>38,>81,>F1,>F1,>F1,>F1,>61  * 00000BB0 *8.....a
+ BYTE >F1,>F1,>16,>E6,>CF,>7F,>CF,>61  * 00000BB8 .......a
+ BYTE >18,>EF,>E1,>61,>FC,>F1,>F1,>61  * 00000BC0 ...a...a
+ BYTE >61,>61,>41,>F1,>F6,>A1,>15,>F1  * 00000BC8 aaA.....
+ BYTE >E1,>61,>1F,>E1,>15,>B1,>E1,>B1  * 00000BD0 .a......
+ BYTE >1B,>B1,>1E,>F6,>1D,>B1,>F1,>61  * 00000BD8 .......a
+ BYTE >D1,>F1,>F6,>1F,>F1,>1F,>F1,>1F  * 00000BE0 ........
+ BYTE >F1,>1F,>C7,>03,>09,>03,>F6,>F6  * 00000BE8 ........
+ BYTE >F6,>C5,>06,>42,>01,>BC,>C5,>0A  * 00000BF0 ...B....
+ BYTE >5F,>03,>B6,>1F,>96,>C5,>06,>D1  * 00000BF8 _.......
+ BYTE >01,>6E,>C5,>06,>10,>33,>DB,>1F  * 00000C00 .n...3..
+ BYTE >DB,>1F,>DB,>1F,>CA,>1F,>6A,>1B  * 00000C08 ......j.
+ BYTE >CA,>1B,>6A,>1F,>F9,>1F,>96,>1F  * 00000C10 ..j.....
+ BYTE >F6,>1B,>A6,>1F,>DF,>F6,>1F,>F6  * 00000C18 ........
+ BYTE >6F,>6F,>F9,>1F,>F9,>1F,>6E,>F1  * 00000C20 oo....n.
+ BYTE >1E,>1F,>6E,>DF,>EF,>6F,>F9,>6F  * 00000C28 ..n..o.o
+ BYTE >6F,>6F,>F9,>1F,>6B,>1F,>FB,>1F  * 00000C30 oo..k...
+ BYTE >6F,>C5,>06,>EA,>0D,>9F,>4F,>FD  * 00000C38 o.....O.
+ BYTE >1F,>F9,>19,>B6,>1F,>6F,>1F,>F6  * 00000C40 .....o..
+ BYTE >F6,>AF,>C6,>06,>16,>02,>1F,>6A  * 00000C48 .......j
+ BYTE >88,>09,>01,>14,>C6,>01,>63,>01  * 00000C50 ......c.
+ BYTE >41,>86,>81,>88,>7F,>6E,>11,>86  * 00000C58 A....n..
+ BYTE >7D,>85,>85,>86,>7D,>87,>7C,>5C  * 00000C60 }...}.|\
+ BYTE >11,>12,>A1,>13,>B1,>1C,>1B,>1A  * 00000C68 ........
+ BYTE >1B,>1C,>1B,>CA,>1B,>AC,>1B,>AC  * 00000C70 ........
+ BYTE >1B,>AC,>1B,>CA,>C5,>04,>BD,>05  * 00000C78 ........
+ BYTE >CA,>1F,>CA,>1F,>CB,>C6,>06,>3A  * 00000C80 .......:
+ BYTE >C5,>0A,>61,>01,>BD,>C5,>06,>32  * 00000C88 ..a....2
+ BYTE >03,>F9,>1F,>F9,>C5,>04,>15,>03  * 00000C90 ........
+ BYTE >F9,>1F,>FD,>C5,>06,>42,>03,>DB  * 00000C98 .....B..
+ BYTE >1F,>FD,>C5,>0B,>49,>0B,>DF,>4F  * 00000CA0 ....I..O
+ BYTE >DF,>4F,>DF,>4F,>F9,>4F,>DF,>1F  * 00000CA8 .O.O.O..
+ BYTE >F6,>C5,>08,>B7,>03,>6B,>1F,>FB  * 00000CB0 .....k..
+ BYTE >C6,>06,>16,>02,>1F,>F9,>C5,>06  * 00000CB8 ........
+ BYTE >3A,>03,>B6,>1F,>96,>C5,>08,>B7  * 00000CC0 :.......
+ BYTE >01,>69,>C5,>06,>3A,>C5,>06,>43  * 00000CC8 .i..:..C
+ BYTE >11,>1F,>6B,>1F,>B9,>1F,>6B,>1F  * 00000CD0 ..k...k.
+ BYTE >B9,>45,>54,>54,>54,>54,>14,>51  * 00000CD8 .ETTTT.Q
+ BYTE >14,>41,>C8,>01,>59,>07,>E1,>E1  * 00000CE0 .A..Y...
+ BYTE >E1,>C1,>31,>31,>31,>85,>7F,>03  * 00000CE8 ..111...
+ BYTE >41,>D1,>E1,>46,>11,>87,>7D,>C5  * 00000CF0 A..F..}.
+ BYTE >01,>62,>06,>D1,>1E,>F1,>E1,>1D  * 00000CF8 .b......
+ BYTE >D1,>4C,>11,>86,>8D,>87,>8B,>47  * 00000D00 .L.....G
+ BYTE >41,>60,>11,>0C,>61,>11,>61,>11  * 00000D08 A`..a.a.
+ BYTE >61,>11,>11,>11,>1B,>13,>1B,>AC  * 00000D10 a.......
+ BYTE >C5,>0C,>6E,>C5,>0C,>77,>02,>1B  * 00000D18 ..n..w..
+ BYTE >BC,>C5,>06,>3A,>03,>CB,>1F,>BC  * 00000D20 ...:....
+ BYTE >C6,>06,>16,>C5,>0C,>D3,>01,>B6  * 00000D28 ........
+ BYTE >C5,>09,>D5,>C6,>06,>13,>01,>BD  * 00000D30 ........
+ BYTE >C5,>03,>7E,>0B,>DE,>1F,>FD,>1F  * 00000D38 ..~.....
+ BYTE >DF,>4F,>FD,>1F,>DE,>1F,>96,>C5  * 00000D40 .O......
+ BYTE >06,>14,>0C,>F6,>1F,>DB,>1F,>6B  * 00000D48 .......k
+ BYTE >1F,>FE,>6F,>FB,>6F,>EF,>1F,>C5  * 00000D50 ..o.o...
+ BYTE >03,>91,>02,>4F,>FE,>C5,>06,>2E  * 00000D58 ...O....
+ BYTE >C5,>06,>17,>C5,>08,>B7,>01,>6B  * 00000D60 .......k
+ BYTE >C5,>06,>3A,>C6,>06,>41,>C5,>0C  * 00000D68 ..:..A..
+ BYTE >D4,>09,>1F,>6B,>1F,>F9,>6F,>DF  * 00000D70 ...k..o.
+ BYTE >6F,>F9,>15,>C5,>06,>7A,>16,>41  * 00000D78 o....z.A
+ BYTE >41,>14,>41,>F4,>4F,>F4,>14,>41  * 00000D80 A.A.O..A
+ BYTE >41,>1E,>D1,>D1,>E1,>C1,>1C,>E1  * 00000D88 A.......
+ BYTE >1C,>11,>11,>11,>D1,>85,>7F,>02  * 00000D90 ........
+ BYTE >41,>41,>C5,>01,>6E,>10,>14,>14  * 00000D98 AA..n...
+ BYTE >F4,>FD,>1F,>F4,>14,>41,>13,>13  * 00000DA0 .....A..
+ BYTE >FC,>FC,>1E,>1D,>F4,>FD,>48,>11  * 00000DA8 ......H.
+ BYTE >C6,>04,>8B,>03,>41,>11,>41,>86  * 00000DB0 ....A.A.
+ BYTE >87,>85,>86,>86,>7D,>62,>11,>1C  * 00000DB8 ....}b..
+ BYTE >D1,>11,>11,>11,>1B,>1C,>B1,>13  * 00000DC0 ........
+ BYTE >B1,>1C,>B1,>13,>1B,>BC,>1F,>AC  * 00000DC8 ........
+ BYTE >1F,>EC,>1F,>EC,>1F,>BC,>1F,>CA  * 00000DD0 ........
+ BYTE >1B,>B6,>1F,>B6,>C5,>04,>15,>01  * 00000DD8 ........
+ BYTE >F9,>C5,>06,>14,>03,>FD,>1F,>FD  * 00000DE0 ........
+ BYTE >C5,>06,>14,>01,>BD,>C5,>06,>32  * 00000DE8 .......2
+ BYTE >01,>6B,>C5,>0D,>3D,>03,>FE,>1B  * 00000DF0 .k..=...
+ BYTE >6B,>C5,>03,>82,>C8,>03,>7F,>08  * 00000DF8 k.......
+ BYTE >FD,>6F,>BF,>6F,>9F,>4F,>DF,>6F  * 00000E00 .o.o.O.o
+ BYTE >C6,>06,>2B,>01,>F9,>C5,>06,>14  * 00000E08 ..+.....
+ BYTE >0D,>6B,>CF,>CB,>CF,>BA,>CF,>CB  * 00000E10 .k......
+ BYTE >CF,>BA,>CF,>CB,>CF,>BA,>C5,>06  * 00000E18 ........
+ BYTE >3A,>01,>69,>C6,>06,>42,>C5,>06  * 00000E20 :.i..B..
+ BYTE >16,>08,>9F,>6F,>F9,>1F,>9F,>1F  * 00000E28 ...o....
+ BYTE >F9,>14,>C5,>04,>74,>03,>41,>41  * 00000E30 ....t.AA
+ BYTE >41,>C5,>01,>6E,>19,>41,>41,>1E  * 00000E38 A..n.AA.
+ BYTE >1D,>E1,>E1,>E1,>D1,>E1,>E1,>D1  * 00000E40 ........
+ BYTE >F1,>F1,>51,>51,>41,>41,>14,>41  * 00000E48 ..QQAA.A
+ BYTE >E4,>E4,>F4,>51,>14,>14,>C5,>02  * 00000E50 ...Q....
+ BYTE >80,>0B,>41,>41,>41,>41,>E1,>31  * 00000E58 ..AAAA.1
+ BYTE >13,>31,>F1,>E1,>D1,>C5,>04,>8C  * 00000E60 .1......
+ BYTE >88,>8B,>8A,>79,>60,>11,>87,>77  * 00000E68 ...y`..w
+ BYTE >86,>88,>C5,>06,>6D,>22,>1B,>4B  * 00000E70 ....m".K
+ BYTE >F6,>CB,>F1,>1C,>F1,>1C,>1B,>BC  * 00000E78 ........
+ BYTE >1B,>AC,>CF,>BC,>1B,>B6,>1F,>CB  * 00000E80 ........
+ BYTE >1F,>6A,>1F,>CB,>1F,>B3,>1F,>DF  * 00000E88 .j......
+ BYTE >1F,>F9,>1F,>DF,>4F,>F9,>1F,>FD  * 00000E90 ....O...
+ BYTE >C5,>06,>32,>01,>FD,>C5,>0E,>8E  * 00000E98 ..2.....
+ BYTE >17,>F9,>1F,>FD,>4F,>FD,>4F,>FD  * 00000EA0 ....O.O.
+ BYTE >1F,>FD,>1F,>BD,>4F,>DF,>1F,>FD  * 00000EA8 ....O...
+ BYTE >1F,>DF,>1F,>F9,>4F,>DF,>1F,>FD  * 00000EB0 ....O...
+ BYTE >C5,>06,>32,>01,>F6,>C5,>06,>42  * 00000EB8 ..2....B
+ BYTE >03,>6B,>6F,>F9,>C5,>0E,>2B,>03  * 00000EC0 .ko...+.
+ BYTE >6F,>1F,>69,>C5,>06,>42,>09,>6B  * 00000EC8 o.i..B.k
+ BYTE >CF,>CB,>1F,>CA,>1F,>CA,>1F,>CA  * 00000ED0 ........
+ BYTE >C5,>08,>B7,>01,>6B,>C5,>08,>B7  * 00000ED8 ....k...
+ BYTE >C5,>06,>43,>02,>1F,>9F,>C5,>06  * 00000EE0 ..C.....
+ BYTE >14,>01,>F9,>C6,>06,>77,>01,>15  * 00000EE8 .....w..
+ BYTE >C5,>01,>64,>05,>41,>41,>41,>14  * 00000EF0 ..d.AAA.
+ BYTE >E1,>48,>41,>C5,>01,>5F,>C5,>04  * 00000EF8 .HA.._..
+ BYTE >74,>46,>41,>C6,>01,>63,>C5,>01  * 00000F00 tFA..c..
+ BYTE >5C,>87,>8D,>85,>90,>88,>7F,>60  * 00000F08 \......`
+ BYTE >11,>86,>7D,>85,>85,>C5,>04,>74  * 00000F10 ..}....t
+ BYTE >18,>1D,>41,>D1,>D1,>F1,>E1,>F1  * 00000F18 ..A.....
+ BYTE >31,>F1,>13,>1B,>16,>B1,>1A,>CF  * 00000F20 1.......
+ BYTE >F3,>1B,>B6,>1F,>BA,>1F,>6B,>1F  * 00000F28 ......k.
+ BYTE >FD,>C5,>09,>D5,>03,>6B,>1F,>B6  * 00000F30 .....k..
+ BYTE >C7,>0C,>A9,>C5,>0D,>3E,>C5,>06  * 00000F38 .....>..
+ BYTE >2C,>01,>FD,>C5,>06,>10,>01,>BD  * 00000F40 ,.......
+ BYTE >C5,>0A,>5F,>C6,>09,>45,>05,>F9  * 00000F48 .._..E..
+ BYTE >1F,>F9,>1F,>FD,>C7,>0C,>D1,>C5  * 00000F50 ........
+ BYTE >06,>43,>0A,>1F,>6B,>1F,>B6,>F6  * 00000F58 .C..k...
+ BYTE >FA,>CF,>F9,>1F,>F6,>C5,>06,>3A  * 00000F60 .......:
+ BYTE >13,>B6,>1F,>F6,>1F,>F9,>1F,>CA  * 00000F68 ........
+ BYTE >1F,>6A,>1F,>CA,>1F,>6A,>CF,>CB  * 00000F70 .j...j..
+ BYTE >1F,>6A,>1F,>CA,>C5,>06,>08,>C5  * 00000F78 .j......
+ BYTE >06,>43,>C8,>0C,>D1,>05,>15,>14  * 00000F80 .C......
+ BYTE >14,>14,>51,>C5,>06,>6D,>46,>14  * 00000F88 ..Q..mF.
+ BYTE >48,>41,>02,>51,>14,>C5,>04,>74  * 00000F90 HA.Q...t
+ BYTE >11,>41,>1D,>E4,>F1,>1F,>F1,>13  * 00000F98 .A......
+ BYTE >F1,>13,>41,>11,>41,>11,>D1,>4D  * 00000FA0 ..A.A..M
+ BYTE >1D,>1D,>85,>7F,>46,>41,>87,>7A  * 00000FA8 ....FA.z
+ BYTE >C6,>04,>8B,>5C,>11,>04,>41,>11  * 00000FB0 ...\..A.
+ BYTE >11,>B6,>85,>7F,>03,>41,>D1,>FD  * 00000FB8 .....A..
+ BYTE >86,>7D,>02,>11,>6D,>87,>EF,>0B  * 00000FC0 .}..m...
+ BYTE >6E,>1F,>FD,>4F,>FD,>1F,>F9,>1F  * 00000FC8 n..O....
+ BYTE >FD,>1F,>DB,>C5,>0A,>61,>C6,>06  * 00000FD0 .....a..
+ BYTE >41,>01,>6B,>C5,>06,>12,>05,>FD  * 00000FD8 A.k.....
+ BYTE >1F,>DF,>1F,>FD,>C5,>0E,>AC,>05  * 00000FE0 ........
+ BYTE >FD,>1F,>FD,>1F,>DB,>C5,>06,>10  * 00000FE8 ........
+ BYTE >03,>FD,>1F,>BD,>C5,>06,>42,>01  * 00000FF0 ......B.
+ BYTE >BD,>C5,>09,>D5,>01,>6B,>C5,>0A  * 00000FF8 .....k..
+ BYTE >61,>C6,>06,>39,>C6,>06,>41,>21  * 00001000 a..9..A!
+ BYTE >FE,>1B,>B6,>1F,>6B,>6F,>DF,>6F  * 00001008 ....ko.o
+ BYTE >F6,>1F,>F6,>1F,>6E,>F1,>DB,>1F  * 00001010 ....n...
+ BYTE >FE,>1F,>CA,>CF,>BA,>1F,>DF,>4F  * 00001018 .......O
+ BYTE >EF,>1B,>6A,>1B,>B6,>1B,>F6,>1F  * 00001020 ..j.....
+ BYTE >6F,>C5,>0F,>72,>01,>6A,>C5,>06  * 00001028 o..r.j..
+ BYTE >08,>C5,>06,>43,>00,>00,>00,>00  * 00001030 ...C....
+ BYTE >00,>00,>00,>00,>00,>00,>00,>00  * 00001038 ........
+
+* Size of data in above array (Array may be padded but this will be correct)
+SIZE_OF_PICCC EQU 4148
+
+*
+* Data file MSTEXAS.TIAP.PACK - Jul 17, 2016
+*
+
+PICPP  EQU  >D000
+
+* Size of data in above array (Array may be padded but this will be correct)
+SIZE_OF_PICPP EQU 4488
+
+*
+* Data file MSTEXAS.TIAM.PACK - Jul 17, 2016
+*
+
+PICMM
+ BYTE >3F,>41,>41,>00,>00,>11,>11,>11  * 00000000 ?AA.....
+ BYTE >11,>11,>11,>00,>00,>11,>11,>11  * 00000008 ........
+ BYTE >11,>11,>11,>00,>00,>11,>11,>11  * 00000010 ........
+ BYTE >11,>11,>11,>00,>00,>11,>11,>11  * 00000018 ........
+ BYTE >11,>1E,>14,>00,>00,>ED,>DD,>11  * 00000020 ........
+ BYTE >11,>14,>11,>00,>00,>D1,>11,>11  * 00000028 ........
+ BYTE >11,>11,>11,>00,>00,>11,>11,>11  * 00000030 ........
+ BYTE >11,>1D,>14,>00,>00,>11,>11,>11  * 00000038 ........
+ BYTE >02,>11,>41,>87,>0A,>01,>41,>8F  * 00000040 ..A...A.
+ BYTE >0A,>02,>55,>41,>86,>0B,>05,>14  * 00000048 ..UA....
+ BYTE >11,>00,>00,>AB,>87,>06,>02,>EE  * 00000050 ........
+ BYTE >14,>86,>07,>02,>EE,>44,>86,>07  * 00000058 .....D..
+ BYTE >02,>EE,>44,>86,>07,>12,>EE,>44  * 00000060 ..D....D
+ BYTE >16,>16,>11,>11,>00,>00,>EE,>5E  * 00000068 .......^
+ BYTE >66,>66,>11,>11,>00,>00,>EF,>6E  * 00000070 ff.....n
+ BYTE >87,>70,>14,>6F,>69,>69,>11,>11  * 00000078 .p.oii..
+ BYTE >00,>00,>EE,>6B,>9B,>9B,>11,>11  * 00000080 ...k....
+ BYTE >00,>00,>EE,>BB,>BB,>BB,>D6,>87  * 00000088 ........
+ BYTE >87,>1E,>66,>16,>00,>00,>EE,>BB  * 00000090 ..f.....
+ BYTE >9B,>99,>66,>66,>00,>00,>B9,>9B  * 00000098 ..ff....
+ BYTE >BB,>BB,>69,>6D,>00,>00,>BE,>EE  * 000000A0 ..im....
+ BYTE >BB,>BB,>FF,>FF,>00,>00,>B9,>6B  * 000000A8 .......k
+ BYTE >86,>A8,>06,>EE,>EE,>BB,>9B,>F9  * 000000B0 ........
+ BYTE >FE,>86,>88,>1C,>66,>66,>00,>00  * 000000B8 ....ff..
+ BYTE >EE,>B9,>66,>BB,>66,>66,>00,>00  * 000000C0 ..f.ff..
+ BYTE >69,>66,>66,>B9,>66,>66,>00,>00  * 000000C8 iff.ff..
+ BYTE >9B,>9B,>66,>96,>11,>11,>41,>41  * 000000D0 ..f...AA
+ BYTE >8F,>0B,>86,>3A,>87,>08,>01,>14  * 000000D8 ...:....
+ BYTE >92,>08,>01,>41,>96,>0B,>02,>41  * 000000E0 ...A...A
+ BYTE >45,>87,>0B,>86,>3A,>07,>11,>11  * 000000E8 E...:...
+ BYTE >41,>00,>00,>1D,>16,>86,>07,>02  * 000000F0 A.......
+ BYTE >9D,>D6,>86,>07,>02,>D4,>D4,>86  * 000000F8 ........
+ BYTE >07,>01,>44,>87,>67,>2C,>44,>44  * 00000100 ..D.g,DD
+ BYTE >66,>99,>11,>11,>00,>00,>44,>45  * 00000108 f.....DE
+ BYTE >61,>61,>11,>11,>00,>00,>5E,>5E  * 00000110 aa....^^
+ BYTE >11,>1D,>11,>11,>00,>00,>6E,>6E  * 00000118 ......nn
+ BYTE >D9,>DE,>11,>11,>00,>00,>6B,>99  * 00000120 ......k.
+ BYTE >BB,>BB,>11,>11,>00,>00,>BB,>BB  * 00000128 ........
+ BYTE >BE,>EE,>C6,>01,>2A,>28,>6D,>EE  * 00000130 ....*(m.
+ BYTE >11,>11,>00,>00,>B9,>B9,>DE,>EE  * 00000138 ........
+ BYTE >11,>11,>00,>00,>99,>96,>11,>11  * 00000140 ........
+ BYTE >66,>16,>00,>00,>6B,>66,>66,>66  * 00000148 f...kfff
+ BYTE >66,>66,>00,>00,>EB,>EE,>FF,>FF  * 00000150 ff......
+ BYTE >FF,>FF,>00,>00,>9B,>9B,>C6,>01  * 00000158 ........
+ BYTE >56,>0A,>EB,>E9,>FE,>FE,>FE,>FE  * 00000160 V.......
+ BYTE >00,>00,>9B,>BE,>C6,>01,>4E,>02  * 00000168 ......N.
+ BYTE >EE,>BB,>C6,>01,>4E,>02,>B6,>E9  * 00000170 ....N...
+ BYTE >C6,>01,>4E,>08,>9B,>9B,>11,>11  * 00000178 ..N.....
+ BYTE >11,>11,>41,>41,>8D,>0B,>03,>1D  * 00000180 ..AA....
+ BYTE >1D,>1E,>86,>0B,>02,>44,>EE,>86  * 00000188 .....D..
+ BYTE >0B,>02,>51,>41,>8E,>0B,>02,>D1  * 00000190 ..QA....
+ BYTE >EE,>86,>0B,>01,>D1,>88,>0A,>01  * 00000198 ........
+ BYTE >1D,>86,>0B,>02,>4E,>EE,>86,>0B  * 000001A0 ....N...
+ BYTE >02,>EE,>E4,>86,>0B,>01,>41,>97  * 000001A8 ......A.
+ BYTE >0A,>86,>09,>86,>68,>0B,>66,>66  * 000001B0 ....h.ff
+ BYTE >BB,>9B,>11,>11,>00,>00,>66,>66  * 000001B8 ......ff
+ BYTE >EE,>C6,>01,>3F,>02,>99,>EE,>C6  * 000001C0 ...?....
+ BYTE >01,>3F,>09,>BB,>EE,>EE,>11,>11  * 000001C8 .?......
+ BYTE >00,>00,>AB,>BB,>C9,>01,>28,>01  * 000001D0 ......(.
+ BYTE >BE,>C6,>01,>2A,>C6,>01,>CC,>01  * 000001D8 ...*....
+ BYTE >B9,>C7,>01,>CB,>0A,>BB,>BB,>61  * 000001E0 .......a
+ BYTE >61,>16,>16,>00,>00,>BB,>BB,>C6  * 000001E8 a.......
+ BYTE >01,>4E,>0A,>B9,>9B,>EF,>EF,>FF  * 000001F0 .N......
+ BYTE >FF,>00,>00,>BB,>BB,>C6,>01,>56  * 000001F8 .......V
+ BYTE >02,>BB,>BA,>C6,>01,>64,>02,>A9  * 00000200 .....d..
+ BYTE >AB,>C6,>01,>4E,>02,>BB,>BB,>C6  * 00000208 ...N....
+ BYTE >01,>4E,>02,>BB,>BB,>C6,>01,>4E  * 00000210 .N.....N
+ BYTE >86,>0B,>22,>41,>41,>00,>00,>11  * 00000218 .."AA...
+ BYTE >11,>11,>15,>11,>11,>00,>00,>11  * 00000220 ........
+ BYTE >1D,>1E,>EE,>EE,>1E,>00,>00,>11  * 00000228 ........
+ BYTE >11,>DD,>ED,>EE,>EE,>00,>00,>11  * 00000230 ........
+ BYTE >11,>41,>11,>11,>51,>87,>33,>87  * 00000238 .A..Q.3.
+ BYTE >0A,>01,>ED,>97,>0A,>02,>DE,>1D  * 00000240 ........
+ BYTE >86,>0B,>02,>EE,>4D,>94,>0B,>86  * 00000248 ....M...
+ BYTE >68,>02,>11,>11,>C6,>01,>08,>02  * 00000250 h.......
+ BYTE >11,>11,>86,>70,>02,>66,>66,>86  * 00000258 ...p.ff.
+ BYTE >7C,>0A,>66,>66,>BE,>BB,>11,>11  * 00000260 |.ff....
+ BYTE >00,>00,>6B,>69,>C6,>01,>CC,>2A  * 00000268 ..ki...*
+ BYTE >BB,>BB,>EE,>EB,>11,>16,>00,>00  * 00000270 ........
+ BYTE >BB,>BB,>BB,>99,>11,>69,>00,>00  * 00000278 .....i..
+ BYTE >BB,>BB,>BE,>BE,>11,>BB,>00,>00  * 00000280 ........
+ BYTE >BB,>BB,>EE,>BE,>11,>61,>00,>00  * 00000288 .....a..
+ BYTE >BB,>BB,>EB,>BB,>11,>11,>00,>00  * 00000290 ........
+ BYTE >BE,>9B,>86,>07,>02,>B9,>EB,>C6  * 00000298 ........
+ BYTE >01,>4E,>02,>BB,>BB,>C6,>01,>F5  * 000002A0 .N......
+ BYTE >02,>B9,>B9,>C6,>01,>56,>02,>9A  * 000002A8 .....V..
+ BYTE >9A,>C6,>01,>64,>02,>BB,>BB,>C6  * 000002B0 ...d....
+ BYTE >01,>4E,>02,>BB,>BB,>C6,>01,>4E  * 000002B8 .N.....N
+ BYTE >06,>BB,>BB,>66,>66,>66,>66,>C7  * 000002C0 ...ffff.
+ BYTE >02,>1B,>8A,>30,>07,>11,>00,>00  * 000002C8 ...0....
+ BYTE >11,>1D,>4E,>1E,>86,>09,>02,>EE  * 000002D0 ..N.....
+ BYTE >14,>87,>09,>01,>41,>8C,>09,>8C  * 000002D8 ....A...
+ BYTE >2D,>98,>09,>98,>09,>86,>09,>01  * 000002E0 -.......
+ BYTE >69,>87,>08,>02,>66,>16,>C6,>01  * 000002E8 i...f...
+ BYTE >BA,>21,>66,>66,>11,>69,>00,>00  * 000002F0 .!ff.i..
+ BYTE >69,>69,>99,>99,>6B,>BB,>00,>00  * 000002F8 ii..k...
+ BYTE >99,>B9,>BB,>BB,>BB,>BB,>00,>00  * 00000300 ........
+ BYTE >BB,>BB,>BB,>BB,>BB,>EE,>00,>00  * 00000308 ........
+ BYTE >BB,>BB,>99,>C7,>03,>03,>03,>9B  * 00000310 ........
+ BYTE >BB,>B9,>C7,>03,>05,>C6,>02,>8C  * 00000318 ........
+ BYTE >02,>B6,>B1,>C6,>01,>2A,>10,>11  * 00000320 .....*..
+ BYTE >11,>66,>66,>00,>00,>EE,>BF,>66  * 00000328 .ff....f
+ BYTE >66,>EF,>EF,>00,>00,>BB,>BB,>C6  * 00000330 f.......
+ BYTE >01,>F5,>12,>B9,>99,>FF,>FF,>FE  * 00000338 ........
+ BYTE >FE,>00,>00,>99,>99,>FE,>FE,>66  * 00000340 .......f
+ BYTE >66,>00,>00,>AB,>AB,>C6,>01,>4E  * 00000348 f......N
+ BYTE >C6,>02,>C1,>06,>00,>00,>BB,>BB  * 00000350 ........
+ BYTE >66,>66,>9A,>07,>98,>09,>01,>11  * 00000358 ff......
+ BYTE >8F,>2A,>98,>09,>98,>09,>86,>09  * 00000360 .*......
+ BYTE >01,>16,>87,>08,>10,>66,>69,>16  * 00000368 .....fi.
+ BYTE >69,>00,>00,>16,>69,>99,>99,>9B  * 00000370 i...i...
+ BYTE >BB,>00,>00,>99,>66,>C6,>03,>02  * 00000378 ....f...
+ BYTE >0E,>99,>99,>BB,>B9,>BE,>BE,>00  * 00000380 ........
+ BYTE >00,>BB,>BB,>BB,>69,>EE,>EE,>C6  * 00000388 ....i...
+ BYTE >02,>76,>16,>EE,>EE,>00,>00,>BB  * 00000390 .v......
+ BYTE >BB,>9B,>9B,>EB,>EE,>00,>00,>BB  * 00000398 ........
+ BYTE >BB,>B1,>91,>B1,>B1,>00,>00,>BB  * 000003A0 ........
+ BYTE >BB,>86,>07,>C6,>02,>C1,>0C,>00  * 000003A8 ........
+ BYTE >00,>BB,>B9,>EF,>EF,>EF,>EF,>00  * 000003B0 ........
+ BYTE >00,>EB,>EB,>C6,>01,>56,>02,>AA  * 000003B8 .....V..
+ BYTE >A9,>C6,>01,>64,>02,>99,>99,>C6  * 000003C0 ...d....
+ BYTE >01,>4E,>02,>9A,>9A,>C6,>01,>4E  * 000003C8 .N.....N
+ BYTE >C6,>02,>C1,>04,>00,>00,>BB,>BB  * 000003D0 ........
+ BYTE >9C,>05,>98,>09,>98,>09,>98,>09  * 000003D8 ........
+ BYTE >95,>09,>01,>1D,>86,>07,>0C,>66  * 000003E0 .......f
+ BYTE >99,>69,>16,>69,>69,>00,>00,>69  * 000003E8 .i.ii..i
+ BYTE >BB,>99,>99,>C6,>03,>04,>0B,>9B  * 000003F0 ........
+ BYTE >9B,>BB,>BE,>00,>00,>BB,>BB,>B9  * 000003F8 ........
+ BYTE >BB,>BE,>C6,>03,>0D,>01,>99,>C6  * 00000400 ........
+ BYTE >03,>93,>1A,>9E,>99,>EE,>EB,>00  * 00000408 ........
+ BYTE >00,>BB,>BB,>9B,>BB,>EE,>BD,>00  * 00000410 ........
+ BYTE >00,>BB,>BB,>61,>EE,>E1,>D6,>00  * 00000418 ...a....
+ BYTE >00,>BB,>BB,>11,>E6,>C6,>01,>2A  * 00000420 .......*
+ BYTE >07,>66,>6D,>66,>16,>00,>00,>9E  * 00000428 .fmf....
+ BYTE >C7,>01,>F4,>02,>BA,>BA,>C6,>01  * 00000430 ........
+ BYTE >56,>02,>99,>99,>C6,>01,>64,>02  * 00000438 V.....d.
+ BYTE >99,>99,>C6,>01,>4E,>02,>AB,>9B  * 00000440 ....N...
+ BYTE >C6,>01,>4E,>C6,>02,>C1,>02,>00  * 00000448 ..N.....
+ BYTE >00,>96,>0B,>8D,>09,>01,>1D,>C6  * 00000450 ........
+ BYTE >01,>18,>06,>11,>11,>11,>11,>11  * 00000458 ........
+ BYTE >4D,>87,>0B,>C6,>02,>1C,>99,>08  * 00000460 M.......
+ BYTE >98,>09,>8C,>09,>04,>1E,>1E,>11  * 00000468 ........
+ BYTE >11,>C6,>02,>74,>04,>16,>16,>69  * 00000470 ...t...i
+ BYTE >66,>C6,>03,>54,>11,>B9,>66,>00  * 00000478 f..T..f.
+ BYTE >00,>9B,>9B,>99,>66,>D9,>66,>00  * 00000480 ....f.f.
+ BYTE >00,>BB,>BB,>BB,>9B,>9B,>C6,>04  * 00000488 ........
+ BYTE >86,>02,>BB,>BE,>C8,>03,>05,>C7  * 00000490 ........
+ BYTE >03,>05,>26,>66,>1D,>00,>00,>BB  * 00000498 ..&f....
+ BYTE >BB,>9E,>99,>66,>16,>00,>00,>BB  * 000004A0 ...f....
+ BYTE >BB,>EE,>69,>11,>11,>00,>00,>BB  * 000004A8 ..i.....
+ BYTE >9B,>6D,>9E,>16,>16,>00,>00,>B9  * 000004B0 .m......
+ BYTE >EB,>EF,>EE,>FF,>FF,>00,>00,>B9  * 000004B8 ........
+ BYTE >BB,>C6,>01,>56,>02,>99,>BB,>C6  * 000004C0 ...V....
+ BYTE >01,>64,>02,>99,>B6,>C6,>01,>4E  * 000004C8 .d.....N
+ BYTE >02,>99,>69,>C6,>01,>4E,>C6,>02  * 000004D0 ..i..N..
+ BYTE >C1,>00,>00,>00,>00,>00,>00,>00  * 000004D8 ........
+
+* Size of data in above array (Array may be padded but this will be correct)
+SIZE_OF_PICMM EQU 1242
+
+* uninitialized data
+SAVE     EQU $				        * return save
+SAVE2    EQU SAVE+2 				* second level return save
+SAVEINT  EQU SAVE2+2				* return save for interrupt hook
+FLAG     EQU SAVEINT+2				* frame flag
+OLDINT   EQU FLAG+2					* Interrupt hook on startup
+packback EQU OLDINT+2				* backup memory for the unpacker
+scrnbuf  EQU packback+12			* CPU copy of the final screen image table, used for reference
+scrnbuf2 EQU scrnbuf+768			* CPU copy of the animated screen image table, used to double buffer
+cntsave  EQU scrnbuf2+768			* countdown save for delay
+charbuf  EQU cntsave+2				* used to copy the four char 255 patterns
+animcnt	 EQU charbuf+32				* animation count (so I don't need to reserve a register)
+
+;SAVE  BSS 2							* return save
+;SAVE2 BSS 2							* second level return save
+;SAVEINT BSS 2						* return save for interrupt hook
+;FLAG  BSS 2							* frame flag
+;OLDINT BSS 2						* Interrupt hook on startup
+;packback bss 12					    * backup memory for the unpacker
+;scrnbuf bss 768					    * CPU copy of the final screen image table, used for reference
+;scrnbuf2 bss 768				    * CPU copy of the animated screen image table, used to double buffer
+;cntsave bss 2						* countdown save for delay
+;charbuf bss 32					    * used to copy the four char 255 patterns
+;animcnt	bss 2						* animation count (so I don't need to reserve a register)
+
+*	end
