@@ -2,6 +2,7 @@
 *.lst
 *.dsk
 *.bin
+*.zip
 src/bin/
 src/effects/credits/credpacked.a99
 tools/casterdata.a99
