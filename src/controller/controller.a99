@@ -577,7 +577,7 @@ VWTR   ORI  R0,>8000
        MOVB R0,@VDPWA
        SWPB R0
        MOVB R0,@VDPWA
-*      NOP                          No need to NOP here, the RT guarantees enough time (Tursi)
+       NOP
        RT
        
 *********************************************************************
@@ -585,7 +585,6 @@ VWTR   ORI  R0,>8000
 * Writes the array at Register 1 to the VDP RAM location in Register
 * 0. Writes Register 2 bytes.
 * Trashes: R0, R1, R2
-* Tursi's change forces the number of bytes to round up to an even count
 *********************************************************************
        EVEN
 VMBW   MOV  R11,@MBWS11
@@ -595,10 +594,9 @@ VMBW   MOV  R11,@MBWS11
        ORI  R0,>4000
        MOVB R0,@VDPWA
 MBWLP  MOVB *R1+,@VDPWD
-       MOVB *R1+,@VDPWD             * suggested by Tursi - speed boost is worth it
        BL   @PLAYSNG
-       DECT R2                      * above change needs this and the jump to change too
-       JOC  MBWLP
+       DEC  R2
+       JNE  MBWLP
        MOV  @MBWS11,R11
        RT
 MBWS11 DATA >0000
@@ -629,7 +627,6 @@ MBSS11 DATA >0000
 * Reads R2 bytes from VDP Ram at address R0 to system RAM at address
 * contained in R1.
 * Trashes: R0, R1, R2
-* Tursi's change forces the number of bytes to round up to an even count
 *********************************************************************
        EVEN
 VMBR   MOV  R11,@MBRS11
@@ -640,10 +637,9 @@ VMBR   MOV  R11,@MBRS11
        MOVB R0, @VDPWA
        NOP                          * added by Tursi - MUST NOP here for some consoles
 MBRLP  MOVB @VDPRD, *R1+
-       MOVB @VDPRD, *R1+            * same unroll suggested above
        BL   @PLAYSNG
-       DECT R2                      * decrement by two and different jmp
-       JOC  MBRLP
+       DEC  R2
+       JNE  MBRLP
        MOV @MBRS11,R11
        RT
 MBRS11 DATA >0000

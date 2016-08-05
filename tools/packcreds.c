@@ -96,7 +96,10 @@ int main(int argc, char *argv[]) {
 			// same byte
 			chr = pos;
 			cnt = 0;
-			while ((txtbuf[chr] == txtbuf[pos++]) && (cnt<127) && (pos < inpos)) ++cnt;
+			while ((txtbuf[chr] == txtbuf[pos]) && (cnt<127) && (pos < inpos)) {
+				++cnt;
+				++pos;
+			}
 			outbuf[outpos++] = cnt+0x80;
 			outbuf[outpos++] = txtbuf[chr];
 		} else {
@@ -106,6 +109,7 @@ int main(int argc, char *argv[]) {
 			++outpos;
 			while ((txtbuf[pos] != txtbuf[pos+1]) && (cnt<127) && (pos < inpos)) {
 				outbuf[outpos++] = txtbuf[pos++];
+				++cnt;
 			}
 			outbuf[chr] = cnt;
 		}
