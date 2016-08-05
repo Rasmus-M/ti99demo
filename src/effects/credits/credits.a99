@@ -7,6 +7,10 @@
 * Created by Rasmus Moustgaard in June 2016
 * rasmus.moustgaard@gmail.com
 *
+* Warning: RLE packing is done by an external tool - you can't run this
+* code unless you first run packcreds.exe on the source and then build
+* the resulting file from that tool
+*
        COPY "../../common/HEADER.INC"
        COPY "../../common/ROUTINES.INC"
 
@@ -139,7 +143,7 @@ UPDNT1 MOV	R4,R0				* Get current row number
 	   SRA	R0,1				* Divide by 2 to get text line
 	   ANDI	R0,>00FF			* Wrap at 256 lines
 	   SLA	R0,5				* Multiply row by 32 to get offset
-	   AI	R0,SCRTXT			* Add text base address
+	   AI	R0,SCRBUF			* Add text base address
 	   LI	R2,32				* Byte/character counter
 	   MOV	R4,R1				* Get row
 	   ANDI	R1,>0001			* Check if odd
@@ -228,9 +232,39 @@ MOVSP6 MOVB *R0,R4
 * Initialize patterns
 *
 INIPAT MOV  R11,*R10+			* Push return address onto the stack
+
+**
+*      Part 0: unpack the RLE created by packcreds (Tursi)
+       LI   R0,SCRTXT           * input data
+	   LI   R1,SCRBUF           * output data
+INIRL1
+       CLR  R2
+       MOVB *R0+,R2             * Get cmd byte
+	   SWPB R2                  * rare instruction with no flag effect
+	   JLT  INIRL3              * negative - RLE byte
+
+INIRL2
+       MOVB *R0+,*R1+           * positive, copy string
+	   DEC  R2
+	   JNE  INIRL2
+	   CI   R0,PAT0
+	   JL   INIRL1
+	   JMP  INIPA0
+
+INIRL3
+       ANDI R2,>007F
+INIRL4
+       MOVB *R0,*R1+            * negative, copy same byte
+	   DEC  R2
+	   JNE  INIRL4
+	   INC  R0                   * done
+	   CI   R0,PAT0
+	   JL   INIRL1
+
+INIPA0	   
 	   LI	R15,VDPWD			* VDP write data
 **
-*	   Part 1: scrolling from pattern 0 to pattern x [32-95]	   
+*	   Part 1: scrolling from pattern 0 to pattern x [32-95]
 	   LI	R0,PTRNT0			* VDP destination address
 	   CLR	R3					* Frame counter f
 	   LI	R4,8				* Inverted frame counter (8 - f)
@@ -486,6 +520,9 @@ VDPW7  DATA >0007
 *// VDPWR
 
 ********************************************************************************
+* SCRTXT will be RLE compressed by 'packcreds.exe' and replaced with an RLE
+* stream. At startup, we unpack the stream to STRBUF and then the rest of
+* the code is unchanged
 
 SCRTXT TEXT '                                '
        TEXT '             DESIRE             '
@@ -669,6 +706,10 @@ SCRTXT TEXT '                                '
 	   TEXT '                                '
 	   TEXT '                                '
 
+* warning: label is used to detect end of the SCRTXT table, don't move it
 PAT0   DATA >0000,>0000,>0000,>0000    ;
        COPY "font.a99"
        COPY "sprites.a99"
+
+* this is where we unpack the RLE credits to
+SCRBUF	EQU $

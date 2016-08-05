@@ -1,0 +1,6 @@
+*.ini
+*.lst
+*.dsk
+src/bin/
+src/effects/credits/credpacked.a99
+tools/casterdata.a99

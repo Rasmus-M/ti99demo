@@ -359,9 +359,10 @@ LDTOV2 MOV  @LVR4,R4
 *      End SAMS
        .else
 
-* Load file from disk with index R0 (e.g. DEMOA, DEMOB, etc.) to address
+* Load data from disk with index R0 (from DEMOA) to address
 * in VRAM of R1 (copy R2 bytes). Big thanks the Asmusr here for providing
 * the example code which this is based off of.
+* modified by Tursi for single file access (for PACKDISK)
 
 * Save the destination address in VRAM to the PAB structure
        MOV   R1,@LDADDR
@@ -383,22 +384,35 @@ ML     MOVB  *R1+, @>8400
        BL    @LOADST
 
        LIMI  0
+
+      .ifndef PACKDISK
+
 * Update the file name we're loading
        MOV   @STATE1,R0         ; Grab index from temporary slot
        AI    R0,65              ; R0 + 'A'
        SWPB  R0
        MOVB  R0,@FNAME+4
-* Copy PAB data into VDP RAM
-       LI    R0,PAB
-       LI    R1,PABDAT
-       LI    R2,PABDTE-PABDAT
-       BL    @VMBW  
-* Load file
+* Load the file
        LI    R0,PAB+9            ; Pointer to name length
        MOV   R0,@FNPNTR          ; Store in >8356
        BLWP  @DSRLNK             ; Open file
        DATA  8
        LIMI  0
+
+       .else
+
+* Packdisk - read the index to see how much to load and from where
+* BUG? Why does the above disk code work? It updates the CPU version of the
+* PAB, not the VDP one? I don't see the copy...
+       MOV   @STATE1,R1          ; get the index, 0 is THIS program, so 1 is the first one
+       DEC   R1
+       SLA   R1,2				 ; multiply by 4 to make an index
+       MOV   @IDXBUF(R1),R0      ; get file index
+       MOV   @IDXBUF+2(R1),R1    ; get file length
+       BL    @READIT             ; bring it into VDP
+        
+       .endif
+
        LWPI  CTRLWP
 * Save the original machine state
        LI    R1,STATE0
@@ -561,7 +575,7 @@ VWTR   ORI  R0,>8000
        MOVB R0,@VDPWA
        SWPB R0
        MOVB R0,@VDPWA
-       NOP
+*      NOP							No need to NOP here, the RT guarantees enough time (Tursi)
        RT
        
 *********************************************************************
@@ -569,6 +583,7 @@ VWTR   ORI  R0,>8000
 * Writes the array at Register 1 to the VDP RAM location in Register
 * 0. Writes Register 2 bytes.
 * Trashes: R0, R1, R2
+* Tursi's change forces the number of bytes to round up to an even count
 *********************************************************************
        EVEN
 VMBW   MOV  R11,@MBWS11
@@ -578,18 +593,41 @@ VMBW   MOV  R11,@MBWS11
        ORI  R0,>4000
        MOVB R0,@VDPWA
 MBWLP  MOVB *R1+,@VDPWD
+             MOVB *R1+,@VDPWD				* suggested by Tursi - speed boost is worth it
        BL   @PLAYSNG
-       DEC  R2
-       JNE  MBWLP
+       DECT R2								* above change needs this and the jump to change too
+       JOC  MBWLP
        MOV  @MBWS11,R11
        RT
 MBWS11 DATA >0000
+
+*********************************************************************
+* VDP RAM Multibyte Set
+* Writes the byte in Register 1 to the VDP RAM location in Register
+* 0. Writes Register 2 bytes.
+* Trashes: R0, R2
+*********************************************************************
+       EVEN
+VMBS   MOV  R11,@MBSS11
+       SWPB R0
+       MOVB R0,@VDPWA
+       SWPB R0
+       ORI  R0,>4000
+       MOVB R0,@VDPWA
+MBSLP  MOVB *R1,@VDPWD
+       BL   @PLAYSNG
+       DEC  R2
+       JNE  MBSLP
+       MOV  @MBSS11,R11
+       RT
+MBSS11 DATA >0000
 
 *********************************************************************
 * VDP RAM Multibyte Read
 * Reads R2 bytes from VDP Ram at address R0 to system RAM at address
 * contained in R1.
 * Trashes: R0, R1, R2
+* Tursi's change forces the number of bytes to round up to an even count
 *********************************************************************
        EVEN
 VMBR   MOV  R11,@MBRS11
@@ -598,10 +636,12 @@ VMBR   MOV  R11,@MBRS11
        SWPB R0
        ANDI R0, >3FFF
        MOVB R0, @VDPWA
+       NOP										* added by Tursi - MUST NOP here for some consoles
 MBRLP  MOVB @VDPRD, *R1+
+             MOVB @VDPRD, *R1+			* same unroll suggested above
        BL   @PLAYSNG
-       DEC  R2
-       JNE  MBRLP
+       DECT R2								* decrement by two and different jmp
+       JOC  MBRLP
        MOV @MBRS11,R11
        RT
 MBRS11 DATA >0000
@@ -827,10 +867,36 @@ MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
 * Save the original state of the machine before we go messing around
        LI   R1,STATE0
        BL   @SAVEST
+
+* if we are loading from a packdisk file, then cache the index sector
+       .ifdef PACKDISK
+       LI   R0, >01A1               ; blank screen a little early
+       BL   @VWTR
+
+	   LI   R0,>4200				; 'B' for DEMOB
+	   MOVB R0,@FNAME+4
+
+       CLR  R0						; record 0
+       LI   R1,2					; two records (256 bytes)
+       BL   @READIT
+       CLR  R0						; copy from VDP to CPU RAM
+       LI   R1,IDXBUF
+       LI   R2,256
+       BL   @VMBR
+       .endif
        
 * Load all files to SAMS
        .ifdef SAMS
 FCOUNT EQU  34                         ; Number of files to load
+*      Clear screen and re-enable it (in case of packdisk above)
+       CLR  R0
+	   LI   R1,>2000
+	   LI   R2,768
+	   BL   @VMBS
+
+       LI   R0, >01E1               ; restore screen
+       BL   @VWTR
+
 *      Set SAMS registers to standard values
        CLR  R0
        CLR  R3
@@ -1064,6 +1130,86 @@ LDWP   LI   R15,WPBU+2
 WPBU    DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
         DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
 
+       .ifdef PACKDISK
+
+*
+* Read R1 records starting at R0 to VDP >0000
+*
+READCN DATA >0000
+READRC DATA >0000
+READRT DATA >0000
+
+READIT
+* save countdown and return
+       MOV   R11,@READRT
+	   MOV   R0,@READRC
+       MOV   R1,@READCN
+
+* set PAB to open mode for INT/FIX 128
+       LI    R0,>0008			; OPEN, INT/FIX
+       MOV   R0,@PABDAT
+       LI    R0,>8000			; record length: 128
+       MOVB  R0,@PABDAT+4
+       CLR   @LDADDR			; VDP >0000
+
+* Copy PAB data into VDP RAM
+       LI    R0,PAB
+       LI    R1,PABDAT
+       LI    R2,PABDTE-PABDAT
+       BL    @VMBW  
+
+* Open the file
+       LI    R0,PAB+9           ; Pointer to name length
+       MOV   R0,@FNPNTR         ; Store in >8356
+       BLWP  @DSRLNK            ; Open file
+       DATA  8
+
+* start reading
+READLP
+       LI    R0,>0208			; read record, INT/FIX
+       MOV   R0,@PABDAT
+       MOVB  @READRC,@PABDAT+6  ; first record
+
+* Copy PAB data into VDP RAM
+       LI    R0,PAB
+       LI    R1,PABDAT
+       LI    R2,PABDTE-PABDAT
+       BL    @VMBW  
+
+* read the record
+       LI    R0,PAB+9           ; Pointer to name length
+       MOV   R0,@FNPNTR         ; Store in >8356
+       BLWP  @DSRLNK            ; Read file
+       DATA  8
+
+* update PAB (in CPU RAM) for next record
+       INC	 @PABDAT+6			; next record
+       LI    R0,128
+       A     R0,@PABDAT+2		; next VDP address
+       DEC   @READCN			; countdown
+       JNE   READLP				; and loop
+
+* close file (TODO: it might be faster to leave it open if we don't break the VDP buffers?)
+       LI    R0,>0108			; close file, INT/FIX
+       MOV   R0,@PABDAT
+
+* Copy PAB data into VDP RAM
+       LI    R0,PAB
+       LI    R1,PABDAT
+       LI    R2,PABDTE-PABDAT
+       BL    @VMBW  
+
+* Close the file
+       LI    R0,PAB+9           ; Pointer to name length
+       MOV   R0,@FNPNTR         ; Store in >8356
+       BLWP  @DSRLNK            ; Close file
+       DATA  8
+
+* back to caller
+       MOV   @READRT,R11
+       B *R11
+       .endif
+
 *********************************************************************
 * Scene List
 *
@@ -1097,5 +1243,11 @@ SCNLST
        DATA >0013, >0500  ; Bank 19: Splitscreen 3D scroller           Mode 1
        DATA >001D, >1E00  ; Bank 29: Credits scroller                  Mode 1
        DATA >0000, >0000  ; Zero signifies reboot
+
+
+       .ifdef PACKDISK
+* Data space for the first sector of the data file - contains the index
+IDXBUF EQU $
+       .endif
 
        END
