@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
 
 		// update the index
 		fseek(fin, 0, SEEK_END);
-		pos = ftell(fin) / 128;
+		pos = (ftell(fin)+127) / 128;
 		index[outpos] = (pos/256)&0xff;		// high byte of length
 		index[outpos+1]=(pos&0xff);			// low byte of length
 		outpos+=2;
