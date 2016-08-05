@@ -611,6 +611,7 @@ MSTART
 
 * set interrupt, preserve the old one
 ;	CLR @OLDINT		* no screen int just yet
+    CLR @INTFTN
 
 * load the image, except we'll leave the very last
 * character all zeros so we can use it as a space
