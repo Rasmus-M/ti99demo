@@ -1247,7 +1247,6 @@ READLP
 SCNLST
        DATA >001F, >0500  ; Bank 31: Stretch                           Mode 2 hybrid
        DATA >001C, >0500  ; Bank 28: Title - Don't mess with Texas     Mode 2
-       DATA >0001, >0500  ; Bank 1: Ms Texas                           Mode 2/3 flicker
        DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
        DATA >0019, >0500  ; Bank 25: Spinning box animation (decoder)  Mode 2 hybrid
        DATA >0016, >0500  ; Bank 22: Infinite dots                     Mode 1
@@ -1259,6 +1258,7 @@ SCNLST
        DATA >0009, >0501  ; Bank 9: Metaballs                          Mode 1
        DATA >0006, >0501  ; Bank 6: Raycaster                          Mode 2
        DATA >0003, >0500  ; Bank 3: Dot fx                             Mode 2 hybrid
+       DATA >0001, >0500  ; Bank 1: Ms Texas                           Mode 2/3 flicker
        DATA >000C, >0500  ; Bank 12: Twister and scroller              Mode 2 hybrid
        DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
        DATA >0017, >0500  ; Bank 23: Multisplit                        Mode 1/2/3
