@@ -944,6 +944,21 @@ LDSAMS CLR  R1
        AI   R2,48
        SWPB R2
        MOVB R2,@VDPWD
+
+	   .ifdef PACKDISK
+
+*      Load from the packed file
+	   LI    R0,>1000            ; VDP address
+	   MOV   R0,@LDADDR
+       MOV   R7,R1               ; get index
+	   DEC   R1
+       SLA   R1,2                ; multiply by 4 to make an index
+       MOV   @IDXBUF(R1),R0      ; get file index
+       MOV   @IDXBUF+2(R1),R1    ; get file length
+       BL    @READI2             ; bring it into VDP (with address preset)
+	   
+	   .else
+
 *      Update the file name we're loading
        MOV   R7,R0                     ; Get index
        AI    R0,65                     ; R0 + 'A'
@@ -959,6 +974,9 @@ LDSAMS CLR  R1
        MOV   R0,@FNPNTR                ; Store in >8356
        BLWP  @DSRLNK                   ; Open file
        DATA  8
+
+	   .endif
+
 *      Map SAMS banks to >A000->BFFF
        MOV  R7,R0
        SLA  R0,1
@@ -1138,6 +1156,9 @@ READRC DATA >0000
 READRT DATA >0000
 
 READIT
+       CLR   @LDADDR            ; VDP >0000
+* alternate entry point with VDP address pre-set
+READI2
 * save countdown and return
        MOV   R11,@READRT
        MOV   R0,@READRC
@@ -1148,7 +1169,6 @@ READIT
        MOV   R0,@PABDAT
        LI    R0,>8000           ; record length: 128
        MOVB  R0,@PABDAT+4
-       CLR   @LDADDR            ; VDP >0000
 
 * Copy PAB data into VDP RAM
        LI    R0,PAB
