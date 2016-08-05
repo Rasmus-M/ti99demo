@@ -1,7 +1,7 @@
 @echo off
 
 rem Assemble
-python tools\xdt99\xas99.py -i -R -L controller.lst -o .\src\bin\demo0 .\src\controller\controller.a99
+python tools\xdt99\xas99.py -i -R -L controller.lst -D PACKDISK -o .\src\bin\demo0 .\src\controller\controller.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo1 .\src\effects\mstexas\mstexas.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo2 .\src\effects\mstexas\mstexas-tiap-pack.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo3 .\src\effects\dotfx\dotfx.a99
@@ -44,8 +44,7 @@ if exist demo.dsk (del demo.dsk)
 rem For now we're using a 360K image until we have reclaimed some more space
 rem python tools\xdt99\xdm99.py demo.dsk --initialize 1440 -n DEMO
 python tools\xdt99\xdm99.py demo.dsk --initialize 720 -n DEMO
-python tools\xdt99\xdm99.py demo.dsk -a ^
-    .\src\bin\demo0 ^
+tools\packdisk .\src\bin\DEMOB ^
     .\src\bin\demo1_0000 ^
     .\src\bin\demo2_0000 ^
     .\src\bin\demo3_0000 ^
@@ -78,7 +77,14 @@ python tools\xdt99\xdm99.py demo.dsk -a ^
     .\src\bin\demo30_0000 ^
     .\src\bin\demo31_0000 ^
     .\src\bin\demo32_0000 ^
-    .\src\bin\demo33_0000 ^
-    -n DEMOA
+    .\src\bin\demo33_0000
+python tools\xdt99\xdm99.py demo.dsk -a .\src\bin\DEMO0 -n DEMOA
+python tools\xdt99\xdm99.py demo.dsk -a .\src\bin\DEMOB -f INT/FIX128 -n DEMOB
 
-call makesams.bat
+rem doing the AMS loader inline here
+rem Assemble
+python tools\xdt99\xas99.py -i -R -D SAMS,PACKDISK -L controller.lst -o .\src\bin\samsdemo .\src\controller\controller.a99
+
+python tools\xdt99\xdm99.py demo.dsk -a ^
+    .\src\bin\samsdemo ^
+    -n SAMSDEMO

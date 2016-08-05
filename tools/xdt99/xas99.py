@@ -155,9 +155,10 @@ class Symbols:
             "GRMWD": 0x9C00, "GRMWA": 0x9C02
             }
         for d in addDefs or []:
-            parts = d.upper().split("=")
-            val = Parser.symconst(parts[1]) if len(parts) > 1 else 1
-            self.symbols[parts[0]] = val
+				    for x in d.split(","):
+						    parts = x.upper().split("=")
+						    val = Parser.symconst(parts[1]) if len(parts) > 1 else 1
+						    self.symbols[parts[0]] = val
         self.refdefs = []
         self.xops = {}
         self.idt = "        "

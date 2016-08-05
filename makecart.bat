@@ -29,7 +29,8 @@ python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo25 --base 0x6000
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo26 --base 0x6000 .\src\effects\decoder\animation32.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo27 --base 0x6000 .\src\effects\decoder\animation33.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo28 --base 0x6000 .\src\effects\title\title.a99
-python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo29 --base 0x6000 .\src\effects\credits\credits.a99
+tools\packcreds.exe .\src\effects\credits\credits.a99 .\src\effects\credits\credpacked.a99
+python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo29 --base 0x6000 .\src\effects\credits\credpacked.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo30 --base 0x6000 .\src\effects\music\songbank2.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo31 --base 0x6000 .\src\effects\stretch\stretch.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo32 --base 0x6000 .\src\effects\stretch\data_bfe0.a99
