@@ -47,6 +47,7 @@ FRAME  MOV  R11,@FRMRET
        MOV  @TICK,R3
        CI   R3,600
        JL   RETURN
+       BL   @OUTRO
        SETO R0                         ; Signal done
 *      Return
 RETURN MOV  @FRMRET,R11
@@ -746,84 +747,88 @@ alldone
 	LI R2,8
 	BL @VMBW
 
+    MOV  @MSAVE,R11
+    B    *R11
+
 ;	LI R0,420				* pause 420 frames (7 seconds)
 ;	BL @delay				* do it
 	
-;* now to unwind the pic we need to zero the '255' chars again
-;	LI R0,>27F8
-;	CLR R1
-;	LI R2,8
-;	BL @VMBSET
-;
-;	LI R0,>2FF8
-;	CLR R1
-;	LI R2,8
-;	BL @VMBSET
-;
-;	LI R0,>37F8
-;	CLR R1
-;	LI R2,8
-;	BL @VMBSET
-;
-;	LI R0,>1FF8
-;	CLR R1
-;	LI R2,8
-;	BL @VMBSET
-;
-;* and start moving it out
-;	li r0,1
-;	mov r0,@animcnt
-;
-;* animation loop
-;lplp2
-;	inc @animcnt
-;	mov @animcnt,r3
-;	ci r3,32
-;	jeq alldon2				* wrapped around from zero
-;	li r4,>3800				* screen output
-;	li r5,scrnbuf			* pattern buffer
-;
-;scrnlp2
-;	mov r4,r0					* line on screen
-;	a r3,r0						* to right edge
-;	mov r5,r1					* line in buffer
-;	li r2,32					* width of screen
-;	s r3,r2						* minus the counter
-;	bl @vmbwset				* write the data
-;
-;	ai r4,32					* next line
-;	ai r5,32					* on both
-;
-;	mov r4,r0					* line on screen
-;	mov r5,r1					* line in buffer
-;	a r3,r1						* to right edge
-;	li r2,32					* width of screen
-;	s r3,r2						* minus the counter
-;	bl @vmbw					* write the data
-;	li r0,>FF00				* write a >FF byte
-;	movb r0,@>8C00		* to VDP
-;
-;	ai r4,32					* next line
-;	ai r5,32					* on both
-;
-;	ci r4,>3B00				* end of screen
-;	jlt scrnlp2				* keep working
-;
-;	LI R0,2						* pause 2 frames so the flicker shows
-;	BL @delay					* do it
-;	jmp lplp2					* and do the next frame
-;
-;alldon2
-;	li r0,>3800				* make sure the screen is clear
-;	li r1,>ff00
-;	li r2,768
-;	bl @VMBSET
+OUTRO  MOV  R11,@MSAVE
+
+* now to unwind the pic we need to zero the '255' chars again
+	LI R0,>27F8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+
+	LI R0,>2FF8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+
+	LI R0,>37F8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+
+	LI R0,>1FF8
+	CLR R1
+	LI R2,8
+	BL @VMBSET
+
+* and start moving it out
+	li r0,1
+	mov r0,@animcnt
+
+* animation loop
+lplp2
+	inc @animcnt
+	mov @animcnt,r3
+	ci r3,32
+	jeq alldon2				* wrapped around from zero
+	li r4,>3800				* screen output
+	li r5,scrnbuf			* pattern buffer
+
+scrnlp2
+	mov r4,r0					* line on screen
+	a r3,r0						* to right edge
+	mov r5,r1					* line in buffer
+	li r2,32					* width of screen
+	s r3,r2						* minus the counter
+	bl @vmbwset				* write the data
+
+	ai r4,32					* next line
+	ai r5,32					* on both
+
+	mov r4,r0					* line on screen
+	mov r5,r1					* line in buffer
+	a r3,r1						* to right edge
+	li r2,32					* width of screen
+	s r3,r2						* minus the counter
+	bl @vmbw					* write the data
+	li r0,>FF00				* write a >FF byte
+	movb r0,@>8C00		* to VDP
+
+	ai r4,32					* next line
+	ai r5,32					* on both
+
+	ci r4,>3B00				* end of screen
+	jlt scrnlp2				* keep working
+
+	LI R0,2						* pause 2 frames so the flicker shows
+	BL @delay					* do it
+	jmp lplp2					* and do the next frame
+
+alldon2
+	li r0,>3800				* make sure the screen is clear
+	li r1,>ff00
+	li r2,768
+	bl @VMBSET
 		
 ;dnlp
 ;	li R0,1
 ;	bl @delay					* enable quit
 ;	jmp dnlp					* and do the next frame
-
 
        MOV  @MSAVE,R11
        B    *R11
