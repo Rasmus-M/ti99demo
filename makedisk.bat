@@ -30,7 +30,8 @@ python tools\xdt99\xas99.py -b -R -o .\src\bin\demo25 .\src\effects\decoder\deco
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo26 .\src\effects\decoder\animation32.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo27 .\src\effects\decoder\animation33.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo28 .\src\effects\title\title.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo29 .\src\effects\credits\credits.a99
+tools\packcreds.exe .\src\effects\credits\credits.a99 .\src\effects\credits\credpacked.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo29 .\src\effects\credits\credpacked.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo30 .\src\effects\music\songbank2.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo31 .\src\effects\stretch\stretch.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo32 .\src\effects\stretch\data_bfe0.a99

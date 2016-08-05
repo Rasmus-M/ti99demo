@@ -951,6 +951,7 @@ LDSAMS CLR  R1
 	   LI    R0,>1000            ; VDP address
 	   MOV   R0,@LDADDR
        MOV   R7,R1               ; get index
+	   JEQ   SKPOVR              ; we don't cache DEMOA
 	   DEC   R1
        SLA   R1,2                ; multiply by 4 to make an index
        MOV   @IDXBUF(R1),R0      ; get file index
@@ -961,6 +962,7 @@ LDSAMS CLR  R1
 
 *      Update the file name we're loading
        MOV   R7,R0                     ; Get index
+	   JEQ   SKPOVR                    ; no point loading DEMOA
        AI    R0,65                     ; R0 + 'A'
        SWPB  R0
        MOVB  R0,@FNAME+4
@@ -978,6 +980,7 @@ LDSAMS CLR  R1
 	   .endif
 
 *      Map SAMS banks to >A000->BFFF
+SKPOVR
        MOV  R7,R0
        SLA  R0,1
        AI   R0,16

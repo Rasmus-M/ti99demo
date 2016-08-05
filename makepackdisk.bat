@@ -83,7 +83,7 @@ python tools\xdt99\xdm99.py demo.dsk -a .\src\bin\DEMOB -f INT/FIX128 -n DEMOB
 
 rem doing the AMS loader inline here
 rem Assemble
-python tools\xdt99\xas99.py -i -R -D SAMS=1 -D PACKDISK=1 -L controller.lst -o .\src\bin\samsdemo .\src\controller\controller.a99
+python tools\xdt99\xas99.py -i -R -D SAMS,PACKDISK -L controller.lst -o .\src\bin\samsdemo .\src\controller\controller.a99
 
 python tools\xdt99\xdm99.py demo.dsk -a ^
     .\src\bin\samsdemo ^
