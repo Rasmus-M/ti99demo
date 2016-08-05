@@ -3,6 +3,7 @@
 *.dsk
 *.bin
 *.zip
+*.rpk
 src/bin/
 src/effects/credits/credpacked.a99
 tools/casterdata.a99

@@ -704,7 +704,7 @@ PLOT   MOV  R0,*R10+                   ; Push R0
 *      Read existing byte
 PLOT1  MOVB @R3LB,*R13                 ; Send low byte of VDP RAM read address
        MOVB R3,*R13                    ; Send high byte of VDP RAM read address
-       ORI  R3,>4000                   ; Set read/write bits 14 and 15 to write (01 - interleaving - Tursi)
+       ORI  R3,>4000                   ; Set read/write bits 14 and 15 to write (01) (and spend some time)
        SOCB *R14,R1                    ; Combine existing screen byte with pixel
 *      Write updated byte
        MOVB @R3LB,*R13                 ; Send low byte of VDP RAM write address
