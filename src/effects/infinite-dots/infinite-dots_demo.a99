@@ -709,9 +709,9 @@ PLOT1  MOVB @R3LB,*R13                 ; Send low byte of VDP RAM read address
 *      Write updated byte
        MOVB @R3LB,*R13                 ; Send low byte of VDP RAM write address
        MOVB R3,*R13                    ; Send high byte of VDP RAM write address
+       DECT R10                        ; Pop R1 (Interleaving with VDP access just to be safe - Tursi)
        MOVB R1,*R15                    ; Write byte to VDP RAM
 *      Return
-       DECT R10                        ; Pop R1
        MOV  *R10,R3
        DECT R10                        ; Pop R1
        MOV  *R10,R1
