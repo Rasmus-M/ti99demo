@@ -159,8 +159,6 @@ class Symbols:
 						    parts = x.upper().split("=")
 						    val = Parser.symconst(parts[1]) if len(parts) > 1 else 1
 						    self.symbols[parts[0]] = val
-						    print "symbols: %s" % self.symbols
-						    print "added: %s" % parts[0]
         self.refdefs = []
         self.xops = {}
         self.idt = "        "
