@@ -438,7 +438,7 @@ VREGS  BYTE >00                        ; Graphics I mode
        BYTE >00                        ; PTRNTB = >0000
        BYTE >4F                        ; SPRATB = >2780
        BYTE >06                        ; SPRPTB = >3000
-       BYTE >00                        ; Backdrop color
+       BYTE >07                        ; Backdrop color
 *// GMODE
 
 *********************************************************************************
@@ -775,10 +775,10 @@ PAT9   DATA >0000,>3E20,>2020,>2000
 *
 * Sprite attributes
 *
-SPRATT BYTE >FF,>00,>00,>01
-	   BYTE >FF,>F0,>04,>01
-	   BYTE >AF,>00,>08,>01
-	   BYTE >AF,>F0,>0C,>01
+SPRATT BYTE >FF,>00,>00,>07
+	   BYTE >FF,>F0,>04,>07
+	   BYTE >AF,>00,>08,>07
+	   BYTE >AF,>F0,>0C,>07
 	   BYTE >C0,>00,>10,>02
 	   BYTE >C0,>00,>10,>03
 	   BYTE >C0,>00,>10,>0A
