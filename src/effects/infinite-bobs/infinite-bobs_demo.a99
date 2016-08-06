@@ -143,11 +143,11 @@ TOPFRM LI   R10,STACK
        JGT  LABEL3
        AI   R6,-300
        BL   @BITMA0
-LABEL3 CI   R6,500
+LABEL3 CI   R6,400
        JLT  LABEL2
-       CI   R6,515
+       CI   R6,415
        JGT  LABEL2
-       AI   R6,-515
+       AI   R6,-415
        NEG  R6
        BL   @BITMA0
 *      Update variables
@@ -155,7 +155,7 @@ LABEL2 INC  @TICK
 *      Check for finish
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,700
+       CI   R1,500
        JL   RETURN
        SETO R0
 *      Return
