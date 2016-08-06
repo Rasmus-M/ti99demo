@@ -1257,7 +1257,7 @@ SCNLST
        DATA >000E, >0500  ; Bank 14: Multiplane                        Mode 1
        DATA >0009, >0501  ; Bank 9: Metaballs                          Mode 1
        DATA >0006, >0501  ; Bank 6: Raycaster                          Mode 2
-       DATA >0003, >0500  ; Bank 3: Dot fx                             Mode 2 hybrid
+       DATA >0003, >0501  ; Bank 3: Dot fx                             Mode 2 hybrid
        DATA >0001, >0500  ; Bank 1: Ms Texas                           Mode 2/3 flicker
        DATA >000C, >0500  ; Bank 12: Twister and scroller              Mode 2 hybrid
        DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
