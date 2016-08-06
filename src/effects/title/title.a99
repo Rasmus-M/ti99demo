@@ -555,7 +555,7 @@ GMODE2 MOVB R1,@VDPWD
        LI   R2,>1800
        BL   @VDPWR
        LI   R0,COLRTB
-       CLR  R1
+       LI   R1,>0600
        LI   R2,>1800
        BL   @VDPWR
 *      Return
@@ -569,7 +569,7 @@ VREGS  BYTE >02                        ; Graphics II mode
        BYTE >03                        ; PTRNTB = >0000, >1800 bytes
        BYTE >76                        ; SPRATB = >3B00
        BYTE >03                        ; SPRPTB = >1800
-       BYTE >00                        ; Backdrop color
+       BYTE >06                        ; Backdrop color
 *// GMODE
 
 ********************************************************************************
