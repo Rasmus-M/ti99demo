@@ -173,6 +173,7 @@ UPDNT1 CLR  R5                         ; Clear MSB
 *      Next character
        DEC  R8
        JNE  UPDNT1
+       BL   @PLAYSNG
 *      Copy section of buffer to VDP
        MOV  @SCRLX,R0
        ANDI R0,4

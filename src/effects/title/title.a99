@@ -27,6 +27,7 @@ SPADDR EQU  SPOK+2                     ; Speech data address
 SPCNTR EQU  SPADDR+2                   ; Speech data counter
 SPSTAT EQU  SPCNTR+2                   ; Speech status byte
 SPREAD EQU  SPSTAT+2                   ; Status read routine
+CPLP   EQU  SPREAD+16
 
 ********************************************************************************
 *
@@ -44,11 +45,18 @@ SPREAD EQU  SPSTAT+2                   ; Status read routine
 INIT   LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
        BL   @GMODE
-*      Extract bitmap to screen
-       LI   R0,PTRNTB
+*      Copy loop to scratchpad
+       LI   R0,CPLP
+       LI   R1,CPLP1
+       LI   R2,CPLP2-CPLP1
+CPPAD  MOV  *R1+,*R0+
+       DECT R2
+       JNE  CPPAD
+*      Extract bitmap to CPU RAM
+       LI   R0,PATBUF
        LI   R1,PATS
        BL   @RLEDC
-       LI   R0,COLRTB
+       LI   R0,COLBUF
        LI   R1,COLS
        BL   @RLEDC
 *      Copy status read routine to scratchpad
@@ -84,12 +92,25 @@ INIT1  CLR  @TICK
 *
 FRAME  LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
+*      Pour effect
+       MOV  @TICK,R1
+       CI   R1,192
+       JHE  FRAME0
+       NEG  R1
+       AI   R1,191                     ; Scanline to pour
+       BL   @POUR
+       JMP  FRAME1
+FRAME0 CI   R1,1000
+       JL   FRAME2
+*      Scroll out effect
+       AI   R1,-1000
+       BL   @SCROLL
 *      Main loop
-       ABS  @SPOK                      ; Check for speech synth
+FRAME2 ABS  @SPOK                      ; Check for speech synth
        JEQ  FRAME1                     ; Skip if not there
 *      Speak
        MOV  @TICK,R1
-       CI   R1,200
+       CI   R1,400
        JL   FRAME1
        LI   R0,>0600
        MOV  R0,@ATTEN
@@ -101,7 +122,7 @@ FRAME  LI   R10,STACK
 FRAME1 INC  @TICK
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,900
+       CI   R1,1032
        JL   RETURN
        SETO R0
 *      Return
@@ -109,6 +130,154 @@ RETURN DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
        B    *R11
 *// FRAME
+
+*********************************************************************************
+*
+* Pour effect:
+* Copy scanline n of source image n+1 times to destination image scanlines 0-n
+*
+* R1: Scanline to pour (0-191)
+*
+BORDER EQU  5
+*
+POUR   MOV  R11,*R10+                  ; Push return address onto the stack
+       MOV  R1,R5                      ; Save scanline number
+       LI   R9,VDPWD
+*      Source scanline offset
+       MOV  R1,R6                      ; Get scanline
+       SRL  R6,3                       ; Divide by 8 to get rows
+       SLA  R6,8                       ; Multiply by 256 bytes per row
+       MOV  R1,R0                      ; Get scanline
+       ANDI R0,7                       ; Line offset within row
+       A    R0,R6                      ; Add to offset
+       AI   R6,BORDER*8                ; Border offset
+*      Destination offset
+       LI   R7,BORDER*8
+*      Full rows of 8 lines
+       MOV  R1,R4                      ; Get scanline
+       INC  R4                         ; Translate to 1-192
+       SRL  R4,3                       ; Divide by 8 to get rows
+       JEQ  POUR6
+*      Patterns
+POUR1  LI   R0,PTRNTB
+       A    R7,R0
+       BL   @VWAD
+       LI   R1,PATBUF                  ; Source
+       A    R6,R1                      ; Add offset
+       LI   R3,32-(2*BORDER)           ; Columns
+       BL   @CPLP
+*      Colors
+       LI   R0,COLRTB
+       A    R7,R0
+       BL   @VWAD
+       LI   R1,COLBUF                  ; Source
+       A    R6,R1                      ; Add offset
+       LI   R3,32-(2*BORDER)           ; Columns
+       BL   @CPLP
+*      Next row
+       BL   @PLAYSNG
+       AI   R7,256
+       DEC  R4
+       JNE  POUR1
+*      Remaining rows
+POUR6  INC  R5
+       ANDI R5,7
+       JEQ  POUR11
+*      Patterns
+       LI   R0,PTRNTB
+       A    R7,R0
+       LI   R1,PATBUF                  ; Source
+       A    R6,R1                      ; Add offset
+       LI   R3,32-(2*BORDER)           ; Columns
+POUR7  BL   @VWAD
+       MOVB *R1,R8                     ; Get source byte
+       MOV  R5,R2                      ; Lines
+POUR8  MOVB R8,*R9
+       DEC  R2
+       JNE  POUR8
+       AI   R0,8
+       AI   R1,8                       ; Move source to next byte on row
+       DEC  R3
+       JNE  POUR7
+       BL   @PLAYSNG
+*      Colors
+       LI   R0,COLRTB
+       A    R7,R0
+       LI   R1,COLBUF                  ; Source
+       A    R6,R1                      ; Add offset
+       LI   R3,32-(2*BORDER)           ; Columns
+POUR9  BL   @VWAD
+       MOVB *R1,R8                     ; Get source byte
+       MOV  R5,R2                      ; Lines
+POUR10 MOVB R8,*R9
+       DEC  R2
+       JNE  POUR10
+       AI   R0,8
+       AI   R1,8                       ; Move source to next byte on row
+       DEC  R3
+       JNE  POUR9
+*      Return
+POUR11 DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+
+*      Copy loop
+CPLP1  MOVB *R1,R8                     ; Get source byte
+       MOVB R8,*R9
+       MOVB R8,*R9
+       MOVB R8,*R9
+       MOVB R8,*R9
+       MOVB R8,*R9
+       MOVB R8,*R9
+       MOVB R8,*R9
+       MOVB R8,*R9
+       AI   R1,8                       ; Move source to next byte on row
+       DEC  R3
+       JNE  CPLP1
+       B    *R11
+CPLP2
+
+*// POUR
+
+*********************************************************************************
+*
+* Scroll left
+*
+* R1: Offset
+*
+SCROLL MOV  R11,*R10+                  ; Push return address onto the stack
+       LI   R0,NAMETB
+       BL   @VWAD
+       LI   R0,VDPWD
+       LI   R4,3
+SCROL6 MOV  R1,R5
+       SWPB R5
+       LI   R3,8
+SCROL5 MOV  R5,R6
+       LI   R2,32
+       S    R1,R2
+       JEQ  SCROL3
+SCROL1 MOVB R5,*R0
+       AI   R5,>0100
+       DEC  R2
+       JNE  SCROL1
+SCROL3 MOV  R1,R2
+       JEQ  SCROL4
+SCROL2 MOVB R5,*R0
+       DEC  R2
+       JNE  SCROL2
+SCROL4 MOV  R6,R5
+       AI   R5,>2000
+       DEC  R3
+       JNE  SCROL5
+       BL   @PLAYSNG
+       DEC  R4
+       JNE  SCROL6
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// SCROLL
 
 *********************************************************************************
 *
@@ -380,6 +549,15 @@ GMODE2 MOVB R1,@VDPWD
        LI   R0,SPRATB
        LI   R1,>D000
        BL   @VSBW
+*      Clear bitmap RAM
+       LI   R0,PTRNTB
+       CLR  R1
+       LI   R2,>1800
+       BL   @VDPWR
+       LI   R0,COLRTB
+       CLR  R1
+       LI   R2,>1800
+       BL   @VDPWR
 *      Return
        DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
@@ -393,6 +571,18 @@ VREGS  BYTE >02                        ; Graphics II mode
        BYTE >03                        ; SPRPTB = >1800
        BYTE >00                        ; Backdrop color
 *// GMODE
+
+********************************************************************************
+*
+* VDP Set Read Address
+*
+* R0: Address to set VDP address counter to
+*
+VRAD   MOVB @R0LB,@VDPWA               ; Send low byte of VDP RAM write address
+       ANDI R0,>3FFF                   ; Make sure the two MSbits are 00 for read
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       B    *R11
+*// VRAD
 
 ********************************************************************************
 *
@@ -423,40 +613,151 @@ VSBW   MOVB @R0LB,@VDPWA               ; Send low byte of VDP RAM write address
        B    *R11
 *// VSBW
 
+*********************************************************************
+*
+* Fast CPU to VDP write, replaces VSMW
+*
+* R0: Destination address
+* R1: Byte to write in MSB
+* R2: Number of bytes to copy
+*
+VDPWR  MOV  R11,*R10+                  ; Push return address onto the stack
+       SWPB R0
+       MOVB R0,@VDPWA                  ; Send low byte of VDP RAM write address
+       SWPB R0
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       LI   R0,VDPWD
+       MOV  R2,R3
+       SRL  R3,3                       ; Number of groups of 8
+       JEQ  VDPW2
+VDPW1  MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       MOVB R1,*R0
+       COC  @VDPW7,R3
+       JNE  VDPW4
+       BL   @PLAYSNG
+VDPW4  DEC  R3
+       JNE  VDPW1
+       ANDI R2,>0007                   ; Isolate number of remaining bytes
+       JEQ  VDPW3
+VDPW2  MOVB R1,*R0
+       DEC  R2
+       JNE  VDPW2
+*      Return
+VDPW3  DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+VDPW7  DATA >0007
+*// VDPWR
+
 ********************************************************************************
+* RLE decode from CPU RAM to CPU RAM
 *
-* RLE decode to VDP RAM
-*
-* R0: Destination
-* R1: Source
+* R0: Destination address
+* R1: Source address
 *
 RLEDC  MOV  R11,*R10+                  ; Push return address onto the stack
-       BL   @VWAD
-       LI   R0,VDPWD
-INIMA1 MOVB *R1+,R2
-       JEQ  INIMA5
-       JLT  INIMA3
+RLEDC0 MOVB *R1+,R2
+       JEQ  RLEDC4
+       JLT  RLEDC2
 *      Different bytes
        SRL  R2,8
-INIMA2 MOVB *R1+,*R0
+RLEDC1 MOVB *R1+,*R0+
        DEC  R2
-       JNE  INIMA2
+       JNE  RLEDC1
        BL   @PLAYSNG
-       JMP  INIMA1
+       JMP  RLEDC0
 *      Identical bytes
-INIMA3 ANDI R2,>7F00
+RLEDC2 ANDI R2,>7F00
        SRL  R2,8
        MOVB *R1+,R3
-INIMA4 MOVB R3,*R0
+RLEDC3 MOVB R3,*R0+
        DEC  R2
-       JNE  INIMA4
+       JNE  RLEDC3
        BL   @PLAYSNG
-       JMP  INIMA1
+       JMP  RLEDC0
 *      Return
-INIMA5 DECT R10                        ; Pop return address off the stack
+RLEDC4 DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
        B    *R11
 *// RLEDC
+
+;********************************************************************************
+;*
+;* RLE decode from CPU RAM to VDP RAM
+;*
+;* R0: Destination
+;* R1: Source
+;*
+;RLEDC  MOV  R11,*R10+                  ; Push return address onto the stack
+;       BL   @VWAD
+;       LI   R0,VDPWD
+;RLEDC1 MOVB *R1+,R2
+;       JEQ  RLEDC5
+;       JLT  RLEDC3
+;*      Different bytes
+;       SRL  R2,8
+;RLEDC2 MOVB *R1+,*R0
+;       DEC  R2
+;       JNE  RLEDC2
+;       BL   @PLAYSNG
+;       JMP  RLEDC1
+;*      Identical bytes
+;RLEDC3 ANDI R2,>7F00
+;       SRL  R2,8
+;       MOVB *R1+,R3
+;RLEDC4 MOVB R3,*R0
+;       DEC  R2
+;       JNE  RLEDC4
+;       BL   @PLAYSNG
+;       JMP  RLEDC1
+;*      Return
+;RLEDC5 DECT R10                        ; Pop return address off the stack
+;       MOV  *R10,R11
+;       B    *R11
+;*// RLEDC
+
+;********************************************************************************
+;*
+;* RLE decode from VDP RAM to CPU RAM
+;*
+;* R0: Source
+;* R1: Destination
+;*
+;RLEDC  MOV  R11,*R10+                  ; Push return address onto the stack
+;       LI   R0,>2000
+;       BL   @VRAD
+;       LI   R0,VDPRD
+;RLEDC1 MOVB *R0,R2
+;       JEQ  RLEDC5
+;       JLT  RLEDC3
+;*      Different bytes
+;       SRL  R2,8
+;RLEDC2 MOVB *R0,*R1+
+;       DEC  R2
+;       JNE  RLEDC2
+;       BL   @PLAYSNG
+;       JMP  RLEDC1
+;*      Identical bytes
+;RLEDC3 ANDI R2,>7F00
+;       SRL  R2,8
+;       MOVB *R0,R0
+;RLEDC4 MOVB R0,*R1+
+;       DEC  R2
+;       JNE  RLEDC4
+;       BL   @PLAYSNG
+;       JMP  RLEDC1
+;*      Return
+;RLEDC5 DECT R10                        ; Pop return address off the stack
+;       MOV  *R10,R11
+;       B    *R11
+;*// RLEDC
 
 ********************************************************************************
 *
@@ -464,3 +765,6 @@ INIMA5 DECT R10                        ; Pop return address off the stack
 *
 PATS   BCOPY "dontmess-tiap-rle.bin"
 COLS   BCOPY "dontmess-tiac-rle.bin"
+
+PATBUF EQU  $
+COLBUF EQU  PATBUF+>1800
