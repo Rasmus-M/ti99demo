@@ -129,10 +129,28 @@ ISR    MOV  R11,*R10+                  ; Push return address onto the stack
        MOV  @VDPINT,R0
        JEQ  ISR1
        BL   @MOVSPR
+       LI   R13,>0000       ; keyboard column 0
+       LI   R12,>0024       ; CRU address of the decoder
+       LDCR R13,3           ; select the column
+       LI   R12,>0006       ; address of the first row
+       STCR R14,8           ; read 8 rows
+       MOV  R14,R13         ; make a copy
+       ANDI R14,>0200       ; test spacebar
+       JEQ  SKIPFX          ; pressed
+       ANDI R13,>1100       ; test quit
+       JEQ  QUIT
+       LI   R13,VDPWA
+       LI   R14,VDPRD
+       LI   R15,VDPWD
 *      Return
 ISR1   DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
        B    *R11
+SKIPFX SETO  @STATE
+       DECT R10
+       JMP  ISR1
+QUIT   CLR  @>83C4          ; Reset user ISR address
+       BLWP @>0000          ; Reboot
 *// ISR
 
 *********************************************************************
@@ -798,21 +816,6 @@ ROTATE MOV  R0,R12                     ; Copy of x1
 *      Return
        B    *R11
 *// ROTATE
-
-*********************************************************************
-*
-* Check for quit
-*
-CKQUIT CLR  R1                         ; Test column 0
-       LI   R12,>0024                  ; Address for column selection
-       LDCR R1,3                       ; Select column
-       LI   R12,>0006                  ; Address to read rows
-       STCR R1,8
-       ANDI R1,>1100
-       JEQ  QUIT
-       B    *R11
-*      Quit
-QUIT   BLWP @>0000
 
 *********************************************************************************
 *
