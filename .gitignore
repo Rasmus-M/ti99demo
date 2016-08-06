@@ -1,7 +1,6 @@
 *.ini
 *.lst
 *.dsk
-*.bin
 *.zip
 *.rpk
 src/bin/
