@@ -95,65 +95,7 @@ INTFTN equ >83c4
 *
 HMREGS DATA >81A0,>8002,>820E,>83FF,>8403,>8576,>8707,>8700,>7B00,>0000
 
-* TODO: the demo probably already did a CALL FILES? Does it also have a DSRLNK?
-
-******************
-* We need to implement a CALL FILES(1) before use to make loading work better
-* That puts the top of VRAM at >3BDB. With that there, we can load everything
-* except per-scanline paletted images without conflicting with the disk system.
-* For those, we can backup the disk buffers as they are only 1061 bytes
-******************
-;FILES
-;	MOV R11,@SAVE		* save return address, assume DSR trashes everything
-;
-;	LI R0,>0100
-;	MOVB R0,@>834C	* 1 file desired
-;
-;	LWPI >83E0			* GPLWS
-;	LI R12,>1000		* We will search for the first FILES subprogram
-;FILEGO
-;	SBO 0						* turn on the ROM
-;	MOV @>400A,R1		* get pointer to the subprogram list
-;FILELP
-;	JEQ FILEDON			* no subprograms
-;	MOV *R1+,R3			* link to next item
-;	MOV *R1+,R2			* address of this one
-;	MOV *R1+,R0			* we are looking for length 1, name >16
-;	CI R0,>0116
-;	JEQ FILEGT
-;	MOV R3,R1				* nope, get next
-;	JMP FILELP
-;
-;* Found it
-;FILEGT
-;	BL *R2					* go ahead and call it
-;	NOP							* skipped on success
-;	JMP FIOK				* all done
-;
-;FILEDON
-;	SBZ 0						* turn it off, wasn't on this card
-;	AI R12,>0100		* next card
-;	CI R12,>2000		* are we done?
-;	JNE FILEGO			* if we can't find it, note we just exit silently
-;
-;FIOK
-;	SBZ 0						* turn off the ROM
-;	LWPI >8300			* our own WS back
-;	MOV @SAVE,R11		* get back return address, no telling what the DSR did
-;	B *R11
-
 * VDP access
-
-******************
-* Read single byte at R0 into MSB R1
-******************
-VSBR	
-	SWPB R0
-	MOVB R0,@>8C02
-	SWPB R0
-	MOVB R0,@>8C02
-	MOVB @>8800,R1
-	B *R11
 
 ******************
 * Read R2 bytes from VDP R0 to CPU R1	
@@ -171,48 +113,6 @@ VMBRLP
 	B *R11
 	
 ******************
-* Write single byte to R0 from MSB R1
-* Destroys R0 (actually just oRs it)
-******************
-VSBW
-	ORI R0,>4000
-	SWPB R0
-	MOVB R0,@>8C02
-	SWPB R0
-	MOVB R0,@>8C02
-	MOVB R1,@>8C00
-	B *R11
-
-******************
-* Write two bytes to R0 from R1
-* Destroys R0 (actually just oRs it)
-******************
-V2BW
-	ORI R0,>4000
-	SWPB R0
-	MOVB R0,@>8C02
-	SWPB R0
-	MOVB R0,@>8C02
-	MOVB R1,@>8C00
-	SWPB R1
-	MOVB R1,@>8C00
-	B *R11
-
-******************
-* Reads two bytes from R0 to R1
-******************
-V2BR
-	SWPB R0
-	MOVB R0,@>8C02
-	SWPB R0
-	MOVB R0,@>8C02
-	MOVB @>8800,R1
-	SWPB R1
-	MOVB @>8800,R1
-	SWPB R1
-	B *R11
-
-******************
 * Write R2 bytes from CPU R1 to VDP R0, with leading set of >FF
 * Destroys R0,R1,R2
 ******************
@@ -224,7 +124,7 @@ VMBWSET
 	MOVB R0,@>8C02
 	LI R0,>FF00
 	MOVB R0,@>8C00
-	JMP VMBWLP
+	JMP VMBWLP2
 
 ******************
 * Write R2 bytes from CPU R1 to VDP R0
@@ -238,6 +138,7 @@ VMBW
 	MOVB R0,@>8C02
 VMBWLP
 	MOVB *R1+,@>8C00
+VMBWLP2	
 	DEC R2
 	JNE VMBWLP
 	B *R11
@@ -325,17 +226,6 @@ LPH#
 	B *R11
  
 ******************
-* KSCAN wrapper (always mode 5)
-******************
-KSCAN
-	LWPI >83E0	* GPLWS
-	LI R0,>0500
-	MOVB R0,@>8374
-	BL @>000E	* SCAN
-	LWPI >8300	* my WS
-	B *R11
-	
-******************
 * Delay for R0 jiffies with both QUIT and Enter/Space detection
 * does it internally for the sake of the F18A versions
 * messes with R12,R5,R1,R0
@@ -343,28 +233,10 @@ KSCAN
 DELAY
 	MOV R11,@SAVE2
 
-DELLP	
-;	seto @scrnto		* reset the screen timeout (and make odd)
-
-* This quit test copied from the console ROM
 WAIT2
-* (Tursi: seems we don't need to test quit in here!)
-;	LI 12,>0024 		* Load CRU
-;	LDCR @>0012,3
-;	SRC 12,7				* delay
-;	LI 12,>0006
-;	STCR 5,8 				* Fetch CRU
-;	CZC @QUITK,5 		* QUIT key?
-;	JNE WAIT
-;	B @REBOOT				* reboot if yes
-	
-WAIT
-;	CLR R12					* prepare to check interrupt
-;	TB 2						* check VDP status
-;	JEQ WAIT2				* no interrupt yet
-    BL @PLAYSNG                        ; Play music
-    ABS @VDPINT
-    JEQ WAIT2
+  BL @PLAYSNG                        ; Play music
+  ABS @VDPINT
+  JEQ WAIT2
 
 	MOV @INTFTN,R1
 	JEQ WAIT4
@@ -373,7 +245,7 @@ WAIT
 	MOV @cntsave,R0
 WAIT4	
 	DEC R0
-	JNE DELLP
+	JNE WAIT2
 	
 	MOV @SAVE2,R11	* timed out
 	B *R11
@@ -401,8 +273,6 @@ SETR1
 MODE4I
   MOV R11,@SAVEINT
   
-;  MOV @>8802,R0		* clear status
-
 	MOV @FLAG,R0		* see which frame we're on
 	JNE INTR42
 	SETO @FLAG
@@ -426,11 +296,8 @@ INTR42
 	BL @VWAD
 
 CHAIN	
-* chain to the old int, if any (music)
+* chain to the old int (music)
   MOV @SAVEINT,R11
-;  MOV @OLDINT,R0
-;  JEQ NOINT
-;  B *R0
 NOINT  
 	B *R11
 	
@@ -554,9 +421,6 @@ unpack
 	clr r5				streamcnt
 	mov r0,r6			streambase
 	
-* TODO: not sure how many bytes to do.. it will
-* wait out the rest of the frame.
-	
 * We'll unpack xxx bytes at a time, to allow
 * for interrupts to process as needed. That
 * should be fine... 
@@ -609,11 +473,9 @@ MSTART
     MOV  R11,@MSAVE
 
 ;	LWPI >8300
-;	BL @FILES			* make sure only 1 file
 	BL @HALFM			* Set half-multicolor mode
 
-* set interrupt, preserve the old one
-;	CLR @OLDINT		* no screen int just yet
+* clear interrupt
     CLR @INTFTN
 
 * load the image, except we'll leave the very last
@@ -682,7 +544,6 @@ MSTART
 	BL @VMBSET
 	
 * now that we're up, we can load the screen interrupt
-  MOV @INTFTN,@OLDINT
 	LI R1,MODE4I
 	MOV R1,@INTFTN
 
@@ -749,12 +610,9 @@ alldone
 	LI R2,8
 	BL @VMBW
 
-    MOV  @MSAVE,R11
-    B    *R11
+  MOV  @MSAVE,R11
+  B    *R11
 
-;	LI R0,420				* pause 420 frames (7 seconds)
-;	BL @delay				* do it
-	
 OUTRO  MOV  R11,@MSAVE
 
 * now to unwind the pic we need to zero the '255' chars again
@@ -779,7 +637,7 @@ OUTRO  MOV  R11,@MSAVE
 	BL @VMBSET
 
 * and start moving it out
-	li r0,1
+	li r0,-1
 	mov r0,@animcnt
 
 * animation loop
@@ -787,9 +645,14 @@ lplp2
 	inc @animcnt
 	mov @animcnt,r3
 	ci r3,32
-	jeq alldon2				* wrapped around from zero
+	jeq alldon2
 	li r4,>3800				* screen output
 	li r5,scrnbuf			* pattern buffer
+	
+;	li r0,>3800       * hack - test scanlines on clear screen
+;	li r1,>ff00
+;	li r2,768
+;	bl @vmbset
 
 scrnlp2
 	mov r4,r0					* line on screen
@@ -1545,28 +1408,15 @@ PICMM
 SIZE_OF_PICMM EQU 1242
 
 * uninitialized data
-SAVE     EQU $				        * return save
+SAVE     EQU $				      * return save
 SAVE2    EQU SAVE+2 				* second level return save
 SAVEINT  EQU SAVE2+2				* return save for interrupt hook
-FLAG     EQU SAVEINT+2				* frame flag
-OLDINT   EQU FLAG+2					* Interrupt hook on startup
-packback EQU OLDINT+2				* backup memory for the unpacker
-scrnbuf  EQU packback+12			* CPU copy of the final screen image table, used for reference
-scrnbuf2 EQU scrnbuf+768			* CPU copy of the animated screen image table, used to double buffer
-cntsave  EQU scrnbuf2+768			* countdown save for delay
-charbuf  EQU cntsave+2				* used to copy the four char 255 patterns
-animcnt	 EQU charbuf+32				* animation count (so I don't need to reserve a register)
-
-;SAVE  BSS 2							* return save
-;SAVE2 BSS 2							* second level return save
-;SAVEINT BSS 2						* return save for interrupt hook
-;FLAG  BSS 2							* frame flag
-;OLDINT BSS 2						* Interrupt hook on startup
-;packback bss 12					    * backup memory for the unpacker
-;scrnbuf bss 768					    * CPU copy of the final screen image table, used for reference
-;scrnbuf2 bss 768				    * CPU copy of the animated screen image table, used to double buffer
-;cntsave bss 2						* countdown save for delay
-;charbuf bss 32					    * used to copy the four char 255 patterns
-;animcnt	bss 2						* animation count (so I don't need to reserve a register)
+FLAG     EQU SAVEINT+2			* frame flag
+packback EQU FLAG+2				  * backup memory for the unpacker
+scrnbuf  EQU packback+12		* CPU copy of the final screen image table, used for reference
+scrnbuf2 EQU scrnbuf+768		* CPU copy of the animated screen image table, used to double buffer
+cntsave  EQU scrnbuf2+768		* countdown save for delay
+charbuf  EQU cntsave+2			* used to copy the four char 255 patterns
+animcnt	 EQU charbuf+32			* animation count (so I don't need to reserve a register)
 
 *	end
