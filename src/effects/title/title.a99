@@ -792,7 +792,7 @@ VREGS  BYTE >02                        ; Graphics II mode
        BYTE >03                        ; PTRNTB = >0000, >1800 bytes
        BYTE >76                        ; SPRATB = >3B00
        BYTE >03                        ; SPRPTB = >1800
-       BYTE >08                        ; Backdrop color
+       BYTE >01                        ; Backdrop color
 *// GMODE
 
 ********************************************************************************
