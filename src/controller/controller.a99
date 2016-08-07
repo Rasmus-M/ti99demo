@@ -1018,6 +1018,10 @@ LDTEXT TEXT "LOADING FILE 00 OF "
 NOSAMS TEXT "512KB SAMS MEMORY REQUIRED"
 TEN    DATA 10
        .endif
+       
+* keyboard control bits
+KBSPC  DATA >0200
+KBQUIT DATA >1100       
 
 * Initialize main variables
 INIT   LI   R6,SCNLST       ; Scene list pointer
@@ -1058,7 +1062,10 @@ LOOP
        CLR  R2              ; only one tune
        MOV  @SONGMEM(R3),R1 ; Address of VGM song
        MOV  R1,R8
-       BL   @STINIT         ; Initialize song player
+       CI   R6,SCNLST+4     ; if this is the first scene...
+       JEQ  SKPSNG          ; don't start the song till after init
+       MOV  R1,@CURSNG      ; else activate it now, so it can play during init
+SKPSNG BL   @STINIT         ; Initialize song player (this is always okay here)
        JMP  NOINC
        
 NOLDMSX
@@ -1072,7 +1079,7 @@ NOINC
        MOV  @FXMEM+0,R0     ; Pointer to effect initialization
        BL   *R0             ; Initialize effect
        BL   @LDWP
-       MOV  R8,@CURSNG
+       MOV  R8,@CURSNG      ; make sure the song is up, no effect if it already was
 
 RENDER                      ; Render frames until the effect says stop
 
@@ -1088,10 +1095,9 @@ VSYNC  BL   @PLAYSNG        ; Play music
        LDCR R13,3           ; select the column
        LI   R12,>0006       ; address of the first row
        STCR R14,8           ; read 8 rows
-       MOV  R14,R13         ; make a copy
-       ANDI R14,>0200       ; test spacebar
+       CZC  @KBSPC,R14      ; test spacebar
        JEQ  SKIPFX          ; pressed
-       ANDI R13,>1100       ; test quit
+       CZC  @KBQUIT,R14     ; test quit
        JEQ  QUIT
        
        MOV  @TIME,R3        ; Copy frame counter over

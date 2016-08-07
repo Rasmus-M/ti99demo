@@ -56,9 +56,29 @@ CPPAD  MOV  *R1+,*R0+
        LI   R0,PATBUF
        LI   R1,PATS
        BL   @RLEDC
+; Removed by Tursi - now generating the color table       
+;       LI   R0,COLBUF
+;       LI   R1,COLS
+;       BL   @RLEDC
+* black out the color buffer (tursi)
        LI   R0,COLBUF
-       LI   R1,COLS
-       BL   @RLEDC
+       LI   R1,>1111
+       LI   R2,>300
+ZERLP  MOV  R1,*R0+
+			 MOV  R1,*R0+
+			 MOV  R1,*R0+
+			 MOV  R1,*R0+
+			 BL   @PLAYSNG
+       DEC R2
+       JNE  ZERLP
+* generate the initial pattern and copy to VDP,
+* first foreground color is white, and we copy it all
+       LI   R0,>F000       
+       BL   @GENCOL
+       LI   R0,>2000
+       LI   R1,COLBUF
+       LI   R2,>1800
+       BL   @VDPMW
 *      Copy status read routine to scratchpad
        LI   R1,SPREAD
        LI   R2,SPCODE
@@ -90,23 +110,104 @@ INIT1  CLR  @TICK
 *
 * Frame
 *
+* pour has three zones:
+* - lines 187-159 - texas, white
+* - lines 150-42 - text, black
+* - lines 30-5 - star, white
+*
+* We skip a few scanlines to account for the time spent updating the color table
+* to hopefully get a fairly smooth looking pour.
+*
 FRAME  LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
 *      Pour effect
        MOV  @TICK,R1
        CI   R1,192
        JHE  FRAME0
-       NEG  R1
+       
+* look for transition areas
+       CI   R1,34
+       JNE  TRAN2
+       
+* top of state - regenerate table with black and only copy 18 character rows
+       LI   R0,>1000       
+       BL   @GENCOL
+       LI   R0,>2000
+       LI   R1,COLBUF
+       LI   R2,>1200
+       BL   @VDPMW
+       LI   R1,8                       ; scanlines/frames to skip
+       A    R1,@TICK
+       JMP  FRAME1
+
+TRAN2  CI R1,151
+       JNE JUSPOR
+       
+* top of text - regenerate table with white and only copy 4 rows
+       LI   R0,>F000       
+       BL   @GENCOL
+       LI   R0,>2000
+       LI   R1,COLBUF
+       LI   R2,>400
+       BL   @VDPMW
+       LI   R1,6                       ; scanlines/frames to skip
+       A    R1,@TICK
+       JMP  FRAME1
+
+JUSPOR NEG  R1
        AI   R1,191                     ; Scanline to pour
        BL   @POUR
        JMP  FRAME1
+       
 FRAME0 CI   R1,1000
        JL   FRAME2
 *      Scroll out effect
        AI   R1,-1000
        BL   @SCROLL
 *      Main loop
-FRAME2 ABS  @SPOK                      ; Check for speech synth
+FRAME2 MOV  @TICK,R2
+       CI   R2,200
+       JLE  FRAME1
+       CI   R2,218
+       JH   FRAME3
+       AI   R2,-200
+       SLA  R2,1
+* draw a little 'bullet trail' to bring in the grey line on line 60
+       CI   R2,31
+       JH   F2NODR
+       MOV  R2,R0                      ; column
+       SLA  R0,3                       ; x8
+       AI   R0,>2704                   ; base address of the line
+       LI   R1,>EE00                   ; solid grey to lead
+       BL   @VSBW
+       AI   R0,8
+       BL   @VSBW			                 ; write two bytes ;)
+F2NODR AI   R2,-4
+       JNC  F2NOER
+       MOV  R2,R0                      ; column
+       SLA  R0,3                       ; x8
+       AI   R0,>2704                   ; base address of the line
+       LI   R1,>EF00                   ; grey on white, unless in border
+       CI   R2,5
+       JL   F2BORD
+       CI   R2,26
+       JH   F2BORD
+       JMP  F2NOBR
+F2BORD LI   R1,>1100                   ; black on border       
+F2NOBR BL   @VSBW
+       AI   R0,8
+       INC  R2                         ; we have to check again, because the border is on odd columns
+       LI   R1,>EF00                   ; grey on white, unless in border
+       CI   R2,5
+       JL   F2BOR2
+       CI   R2,26
+       JH   F2BOR2
+       JMP  F2NOB2
+F2BOR2 LI   R1,>1100       
+F2NOB2 BL   @VSBW			                 ; write second byte
+F2NOER JMP  FRAME1       
+ 
+FRAME3 ABS  @SPOK                      ; Check for speech synth
        JEQ  FRAME1                     ; Skip if not there
 *      Speak
        MOV  @TICK,R1
@@ -135,10 +236,12 @@ RETURN DECT R10                        ; Pop return address off the stack
 *
 * Pour effect:
 * Copy scanline n of source image n+1 times to destination image scanlines 0-n
+* Tursi modification - pattern table only! Also only within the actual image area.
+* only columns 6 to 25 contain useful data for this effect (just increased border by 1)
 *
 * R1: Scanline to pour (0-191)
 *
-BORDER EQU  5
+BORDER EQU  6
 *
 POUR   MOV  R11,*R10+                  ; Push return address onto the stack
        MOV  R1,R5                      ; Save scanline number
@@ -167,13 +270,13 @@ POUR1  LI   R0,PTRNTB
        LI   R3,32-(2*BORDER)           ; Columns
        BL   @CPLP
 *      Colors
-       LI   R0,COLRTB
-       A    R7,R0
-       BL   @VWAD
-       LI   R1,COLBUF                  ; Source
-       A    R6,R1                      ; Add offset
-       LI   R3,32-(2*BORDER)           ; Columns
-       BL   @CPLP
+;       LI   R0,COLRTB
+;       A    R7,R0
+;       BL   @VWAD
+;       LI   R1,COLBUF                  ; Source
+;       A    R6,R1                      ; Add offset
+;       LI   R3,32-(2*BORDER)           ; Columns
+;       BL   @CPLP
 *      Next row
        BL   @PLAYSNG
        AI   R7,256
@@ -201,21 +304,21 @@ POUR8  MOVB R8,*R9
        JNE  POUR7
        BL   @PLAYSNG
 *      Colors
-       LI   R0,COLRTB
-       A    R7,R0
-       LI   R1,COLBUF                  ; Source
-       A    R6,R1                      ; Add offset
-       LI   R3,32-(2*BORDER)           ; Columns
-POUR9  BL   @VWAD
-       MOVB *R1,R8                     ; Get source byte
-       MOV  R5,R2                      ; Lines
-POUR10 MOVB R8,*R9
-       DEC  R2
-       JNE  POUR10
-       AI   R0,8
-       AI   R1,8                       ; Move source to next byte on row
-       DEC  R3
-       JNE  POUR9
+;       LI   R0,COLRTB
+;       A    R7,R0
+;       LI   R1,COLBUF                  ; Source
+;       A    R6,R1                      ; Add offset
+;       LI   R3,32-(2*BORDER)           ; Columns
+;POUR9  BL   @VWAD
+;       MOVB *R1,R8                     ; Get source byte
+;       MOV  R5,R2                      ; Lines
+;POUR10 MOVB R8,*R9
+;       DEC  R2
+;       JNE  POUR10
+;       AI   R0,8
+;       AI   R1,8                       ; Move source to next byte on row
+;       DEC  R3
+;       JNE  POUR9
 *      Return
 POUR11 DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
@@ -278,6 +381,126 @@ SCROL4 MOV  R6,R5
        MOV  *R10,R11
        B    *R11
 *// SCROLL
+
+*********************************************************************************
+*
+* Generate the color buffer, R0 MSB contains foreground color to set, 
+* goes to COLBUF, corrupts r0-r4 - Tursi
+*
+GENCOL MOV  R11,*R10+                  ; Push return address onto the stack
+* make R0 MSB a word for performance
+       MOVB R0,R1
+       SWPB R0
+       MOVB R1,R0
+* first char - 1 row 5, 7 rows 4
+       LI   R3,COLBUF
+* build the character       
+       LI   R2,CHRBUF
+       MOV  R0,R1
+       ORI  R1,>0504
+       MOV  R1,*R2+
+       MOV  R0,R1
+       ORI  R1,>0404
+       MOV R1,*R2+
+       MOV R1,*R2+
+       MOV R1,*R2+
+			 BL   @LDROW
+* next char, all 4
+       MOV  R1,@CHRBUF
+       BL   @LDROW
+* next char, 4 last rows are 5
+			 LI   R2,CHRBUF+4
+			 MOV  R0,R1
+			 ORI  R1,>0505
+       MOV R1,*R2+
+       MOV R1,*R2+
+       BL   @LDROW
+* next char, all 5
+			 LI   R2,CHRBUF
+       MOV R1,*R2+
+       MOV R1,*R2+
+       BL   @LDROW
+* next char, 4 last rows are 15
+			 LI   R2,CHRBUF+4
+			 MOV  R0,R1
+			 ORI  R1,>0F0F
+       MOV R1,*R2+
+       MOV R1,*R2+
+       BL   @LDROW
+* next char, all 15
+			 LI   R2,CHRBUF
+       MOV R1,*R2+
+       MOV R1,*R2+
+* there are 14 character rows of white
+       LI   R1,14
+GENLP
+       BL   @LDROW
+       BL   @LDROW
+			 DECT R1
+			 JNE  GENLP
+* next, last four rows are 9
+			 LI   R2,CHRBUF+4
+			 MOV  R0,R1
+			 ORI  R1,>0909
+       MOV R1,*R2+
+       MOV R1,*R2+
+       BL   @LDROW
+* next, 4 of 9, 4 of 8
+			 LI   R2,CHRBUF
+       MOV R1,*R2+
+       MOV R1,*R2+
+       MOV  R0,R1
+       ORI  R1,>0808
+       MOV R1,*R2+
+       MOV R1,*R2+
+       BL   @LDROW
+* next, all 8
+			 LI   R2,CHRBUF
+       MOV R1,*R2+
+       MOV R1,*R2+
+       BL   @LDROW
+* next, last 4 are 6
+			 LI   R2,CHRBUF+4
+			 MOV  R0,R1
+			 ORI  R1,>0606
+       MOV R1,*R2+
+       MOV R1,*R2+
+       BL   @LDROW
+* finally, 7 rows of 6 and 1 row of 8
+			 LI   R2,CHRBUF
+       MOV R1,*R2+
+       MOV R1,*R2+
+       MOV  R0,R1
+       ORI  R1,>0608
+       INCT R2
+       MOV R1,*R2+
+       BL   @LDROW
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// GENCOL
+
+*********************************************************************************
+*
+* Helper for above - copy one character row of colors into R3, corrupts R2,R4
+* Note that the logo only exists from columns 5-26. Also does the music check.
+* R3 is always offset by a full 32 character row, though
+* 
+LDROW  AI   R3,40											; 5 chars
+			 LI   R4,22
+LDRLP  LI   R2,CHRBUF
+       MOV  *R2+,*R3+
+       MOV  *R2+,*R3+
+       MOV  *R2+,*R3+
+       MOV  *R2+,*R3+
+       DEC  R4
+       JNE  LDRLP
+       AI   R3,40											; 5 chars
+       MOV  R11,R2
+       BL   @PLAYSNG
+       B    *R2
+*// LDROW
 
 *********************************************************************************
 *
@@ -656,6 +879,48 @@ VDPW3  DECT R10                        ; Pop return address off the stack
 VDPW7  DATA >0007
 *// VDPWR
 
+*********************************************************************
+*
+* Fast CPU to VDP write, replaces VMBW
+*
+* R0: Destination address
+* R1: CPU source address
+* R2: Number of bytes to copy
+*
+VDPMW  MOV  R11,*R10+                  ; Push return address onto the stack
+       SWPB R0
+       MOVB R0,@VDPWA                  ; Send low byte of VDP RAM write address
+       SWPB R0
+       ORI  R0,>4000                   ; Set the two MSbits to 01 for write
+       MOVB R0,@VDPWA                  ; Send high byte of VDP RAM write address
+       LI   R0,VDPWD
+       MOV  R2,R3
+       SRL  R3,3                       ; Number of groups of 8
+       JEQ  VDPM2
+VDPM1  MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       MOVB *R1+,*R0
+       COC  @VDPW7,R3                  ; still using VDPW7 on purpose, no need to duplicate
+       JNE  VDPM4
+       BL   @PLAYSNG
+VDPM4  DEC  R3
+       JNE  VDPM1
+       ANDI R2,>0007                   ; Isolate number of remaining bytes
+       JEQ  VDPM3
+VDPM2  MOVB *R1+,*R0
+       DEC  R2
+       JNE  VDPM2
+*      Return
+VDPM3  DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// VDPMW
+
 ********************************************************************************
 * RLE decode from CPU RAM to CPU RAM
 *
@@ -695,7 +960,7 @@ RLEDC4 DECT R10                        ; Pop return address off the stack
 ;* R0: Destination
 ;* R1: Source
 ;*
-;RLEDC  MOV  R11,*R10+                  ; Push return address onto the stack
+;RLEDCV MOV  R11,*R10+                  ; Push return address onto the stack
 ;       BL   @VWAD
 ;       LI   R0,VDPWD
 ;RLEDC1 MOVB *R1+,R2
@@ -721,7 +986,7 @@ RLEDC4 DECT R10                        ; Pop return address off the stack
 ;RLEDC5 DECT R10                        ; Pop return address off the stack
 ;       MOV  *R10,R11
 ;       B    *R11
-;*// RLEDC
+;*// RLEDCV
 
 ;********************************************************************************
 ;*
@@ -763,8 +1028,9 @@ RLEDC4 DECT R10                        ; Pop return address off the stack
 *
 * Include image files
 *
-PATS   BCOPY "dontmess-tiap-rle.bin"
-COLS   BCOPY "dontmess-tiac-rle.bin"
+PATS   BCOPY "dontmess2-tiap-rle.bin"
+*COLS   BCOPY "dontmess-tiac-rle.bin"
 
 PATBUF EQU  $
 COLBUF EQU  PATBUF+>1800
+CHRBUF EQU  COLBUF+>1800

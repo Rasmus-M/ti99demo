@@ -73,7 +73,7 @@ TOPINI LI   R10,STACK
        LI   R1,FRAME0
        LI   R2,FRAMEE-FRAME0
 COPY   MOV  *R1+,*R0+
-       DEC  R2
+       DECT R2                          ; tursi tweak - THIS was a hard bug to find! ;)
        JNE  COPY
 *      Logo
        LI   R0,NAMET1

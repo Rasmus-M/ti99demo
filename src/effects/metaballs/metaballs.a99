@@ -86,7 +86,9 @@ CTLP    MOVB R1, *R0
         DEC  R2
         JNE  CTLP
         
+        LWPI CTRLWP                    ; added by Tursi
         BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP                      ; added by Tursi
 
 * Compute dx^2 table
         LI   R0, 32
@@ -113,7 +115,9 @@ DX2L2
         SLA  R4, 1
         MOV  R5, @SQTAB(R4)
 
+        LWPI CTRLWP                    ; added by Tursi
         BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP                      ; added by Tursi
 
         INC  R3
         DEC  R2

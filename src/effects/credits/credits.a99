@@ -101,6 +101,14 @@ FRAME  LI   R10,STACK
        JNE  LOOP
        CLR  @NTROW              * Reset name table row
        INC  @ROWNO              * Next text row
+*      cycle colors (added by Tursi - is this too much? :) )
+       MOV  @ROWNO,R0
+       SRL  R0,1
+       ANDI R0,>0001
+       AI   R0,COLRTB           * color table offset by 0 or 1 byte
+       LI   R1,COLORS
+       LI   R2,16
+       BL   @VDPCP
 LOOP   CLR  R0
        MOV  @ROWNO,R1
        CI   R1,328
@@ -390,6 +398,7 @@ VREGS  BYTE >00                 * Graphics I mode
        BYTE >00                 * Backdrop color
 COLORS BYTE >40,>50,>40,>50,>40,>50,>40,>50
        BYTE >40,>50,>40,>50,>40,>50,>40,>50
+       BYTE >40
        
 ********************************************************************************
 *

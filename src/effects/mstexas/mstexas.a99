@@ -348,14 +348,16 @@ DELLP
 
 * This quit test copied from the console ROM
 WAIT2
-	LI 12,>0024 		* Load CRU
-	LDCR @>0012,3
-	SRC 12,7				* delay
-	LI 12,>0006
-	STCR 5,8 				* Fetch CRU
-	CZC @QUITK,5 		* QUIT key?
-	JNE WAIT
-	B @REBOOT				* reboot if yes
+* (Tursi: seems we don't need to test quit in here!)
+;	LI 12,>0024 		* Load CRU
+;	LDCR @>0012,3
+;	SRC 12,7				* delay
+;	LI 12,>0006
+;	STCR 5,8 				* Fetch CRU
+;	CZC @QUITK,5 		* QUIT key?
+;	JNE WAIT
+;	B @REBOOT				* reboot if yes
+	
 WAIT
 ;	CLR R12					* prepare to check interrupt
 ;	TB 2						* check VDP status
