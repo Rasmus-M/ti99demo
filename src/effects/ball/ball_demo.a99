@@ -1,4 +1,5 @@
 *********************************************************************
+*********************************************************************
 *
 * Boing ball demo
 * For the TI-99/4A home computer
@@ -140,14 +141,16 @@ MOVE
        JLT  MOVE2
 *      Moving right
        MOV  @X,R0
-       CI   R0,>B800
+*       CI   R0,>B800   - modified by Tursi
+       CI   R0,>BF00    ; chosen so it's never a full char of wraparound
        JLE  MOVE3
        NEG  @VX
        NEG  @ANIDIR
        JMP  MOVE3
 *      Moving left
 MOVE2  MOV  @X,R0
-       CI   R0,>0200
+*       CI   R0,>0200
+       CI   R0,>0100
        JHE  MOVE3
        NEG  @VX
        NEG  @ANIDIR
@@ -182,7 +185,11 @@ HEIGHT EQU  72                         ; Height in pixels
 *
 SOFTBL MOV  R11,*R10+                  ; Push return address onto the stack
        MOV  @X,R0
-       SRL  R0,8
+       LI   R12,WIDTH                  ; Width in characters (columns)
+       CI   R0,>b800                   ; cropping (added by Tursi)
+       JL   SOFB00
+       DEC  R12                        ; draw one fewer columns
+SOFB00 SRL  R0,8
        MOV  @Y,R1
        SRL  R1,8
        AI   R1,-4
@@ -198,7 +205,6 @@ SOFTBL MOV  R11,*R10+                  ; Push return address onto the stack
        A    R4,R3                      ; Otherwise reduce number of rows to display
 SOFTB0 LI   R9,VDPWD
        LI   R13,VDPWA
-       LI   R12,WIDTH                  ; Width in characters (columns)
        LI   R14,R0LB
        LI   R15,HEIGHT                 ; Height in pixels
 *      First pixel rows until full character
@@ -219,7 +225,12 @@ SOFTB2 MOVB *R7+,*R9                   ; Write a byte to VDP
        A    R8,R7                      ; Move source to next column
        DEC  R4                         ; Count down columns
        JNE  SOFTB1                     ; Loop if more columns
-       S    R2,R3                      ; Subtract from total pixel rows
+       CI   R12,WIDTH                  ; added by Tursi, fix up column when cropped
+       JEQ  SOFB01
+       AI   R0,8
+       A    R2,R7
+       A    R8,R7
+SOFB01 S    R2,R3                      ; Subtract from total pixel rows
        MOV  R6,R0                      ; Restore VDP address
        AI   R0,256                     ; Add one character row
        ANDI R0,>7FF8                   ; Reset offset within character
@@ -266,7 +277,10 @@ SOFTB5 MOVB *R7+,*R9                   ; Write a byte to VDP
        AI   R7,HEIGHT-8                ; Move source to next column
        DEC  R4                         ; Count down columns
        JNE  SOFTB5                     ; Loop of more columns
-       AI   R0,256                     ; Move VDP address to next character row
+       CI   R12,WIDTH                  ; added by Tursi, fix up column when cropped
+       JEQ  SOFB02
+       AI   R7,HEIGHT  ; (-8+8)
+SOFB02 AI   R0,256                     ; Move VDP address to next character row
        AI   R7,(-WIDTH*HEIGHT)+8       ; Move source 7 lines down
        AI   R3,-8                      ; Subtract 8 rows from total rows left
        DEC  R2                         ; Count down character rows

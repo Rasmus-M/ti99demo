@@ -358,11 +358,17 @@ DRAW41 MOV  @TICK,R1
 *      Move sprites
        BL   @ISR
 *      Next dot
-       INC  @TICK
        MOV  @TICK,R0
+       AI   R0,256
+       MOV  R0,@TICK
        CI   R0,1024
        JLT  DRAW41
-       INC  @STATE
+       AI   R0,-1023
+       CI   R0,256
+       JEQ  DRAW42
+       MOV  R0,@TICK
+       JMP  DRAW41
+DRAW42 INC  @STATE
        CLR  @TICK
 *      Return
        DECT R10                        ; Pop return address off the stack
@@ -388,20 +394,25 @@ DRAW5  MOV  R11,*R10+                  ; Push return address onto the stack
 *      Select first pattern table
        LI   R0,>0400
        BL   @VWTR
-*      Draw stars
+*      Draw stars (interleaved - modified by Tursi)
        CLR  @TICK
-DRAW51 MOV  @TICK,R1
-       CI   R1,4
-       JEQ  DRAW52
+       LI   R0,7
+       MOV  R0,@COUNT
 *      Pattern table drawing base
-       ANDI R1,3
+DRAW51 ANDI R1,3
        SLA  R1,11
        MOV  R1,@VDPPAT
 *      Draw stars
-       LI   R0,7
-       MOV  R0,@COUNT
-       CLR  @X
-       CLR  @Y
+       LI   R2,60
+       MOV  @COUNT,R0
+       CLR  R1
+       MPY  R2,R0
+       MOV  R1,@X
+       LI   R2,40
+       MOV  @COUNT,R0
+       CLR  R1
+       MPY  R2,R0
+       MOV  R1,@Y
 *      Draw a star
 DRAW53 LI   R0,STAR                    ; Contains base address of shape data structure
        MOV  @TICK,R1                   ; Number of the frame to draw (zero based)
@@ -411,15 +422,14 @@ DRAW53 LI   R0,STAR                    ; Contains base address of shape data str
        MOV  @Y,R3                      ; Translation y
        BL   @SHAPE
 *      Next star
-       LI   R0,60
-       A    R0,@X
-       LI   R0,40
-       A    R0,@Y
-       DEC  @COUNT
-       JNE  DRAW53
-*      Next frame
        INC  @TICK
-       JMP  DRAW51
+       MOV  @TICK,R1
+       CI   R1,4
+       JNE  DRAW51
+       CLR  @TICK
+       DEC  @COUNT
+       JNE  DRAW51
+*      done
 DRAW52 INC  @STATE
        CLR  @TICK
 *      Return
@@ -457,7 +467,7 @@ MOVE1  INC  @TICK
 MOVE2  DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
        B    *R11
-*// DRAW1
+*// MOVE
 
 *********************************************************************
 *
