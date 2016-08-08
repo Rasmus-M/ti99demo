@@ -72,6 +72,7 @@ TOPINI LI   R10,STACK
 ;       LI   R2,>187A                   ; Number of bytes to copy in R2
 ;       BL   @LDTORAM
 *      Decode map
+*      (not only map but also characters, so actual map ends in MD0)
        LI   R0,COL0
        LI   R1,RLEMAP
        BL   @RLEDC
