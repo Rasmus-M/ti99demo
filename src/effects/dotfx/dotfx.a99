@@ -86,149 +86,172 @@ CPLP   MOV  *R0+, *R1+
 
 * Copy pattern table       
        CLR  R0
-       LI   R3, 16
-PTLP   LI   R1, PAT1
-       LI   R2, 128
-       BL   @VMBW
-       AI   R0, 128
+       MOVB @R0LB, @VDPWA
+       MOVB R0, @VDPWA
+       LI   R0,VDPWD
+*      8x32 characters
+       LI   R4, 8
+*      4x8 characters
+PTLP   LI   R5,PAT0
+       LI   R3, 4
+*      8 identical characters
+PTLP1  LI   R6, 8
+*      Character
+PTLP2  MOV  R5, R1
+       LI   R2, 8
+PTLP3  MOVB *R1+, *R0
+       DEC  R2
+       JNE  PTLP3
+*      Next character
+       DEC  R6
+       JNE  PTLP2
+*      Next group of 8
+       AI   R5, 8
+       DEC  R3
+       JNE  PTLP1
+*      Play music
        LWPI CTRLWP
        BL   @PLAYSNG
        LWPI FXWP
-       DEC  R3
+*      Next group of 32
+       DEC  R4
        JNE  PTLP
-       
+
 * Copy color table       
        LI   R0, >2000
-       LI   R3, 16
-CTLP   LI   R1, COLTAB
-       LI   R2, 128
-       BL   @VMBW
-       AI   R0, 128
+       MOVB @R0LB, @VDPWA
+       MOVB R0, @VDPWA
+       LI   R0,VDPWD
+*      4x64 characters
+       LI   R4, 8
+*      64 characters
+CTLP   LI   R3, 64
+       LI   R1, COLTAB
+*      Character
+CTLP1  MOVB *R1+,R5
+       LI   R2, 8
+CTLP2  MOVB R5,*R0
+       DEC  R2
+       JNE  CTLP2
+*      Next character
+       DEC  R3
+       JNE  CTLP1
        LWPI CTRLWP
        BL   @PLAYSNG
-       LWPI FXWP       
-       DEC  R3
+       LWPI FXWP
+*      Next group of 32
+       DEC  R4
        JNE  CTLP
 
-       LWPI CTRLWP       
+* Enable the screen
+       LI   R0,>01E2
+       BL   @VWTR
+
+       LWPI CTRLWP
        MOV  @SAVR11, R11
        RT
        
-* 1 2 4 8 1 2 4 8
-* . . . . . . . .
-* . . . . . . . .
-* . . . . . . . .
-* . . . x x . . .
-* . . . x x . . .
-* . . . . . . . .
-* . . . . . . . .
-* . . . . . . . .
+PAT0   DATA >60F0,>F060,>0000,>0000
+PAT1   DATA >70F8,>F8F8,>7000,>0000
+PAT2   DATA >78FC,>FCFC,>FC78,>0000
+PAT3   DATA >7CFE,>FEFE,>FEFE,>7C00
 
-PAT0   BYTE >00, >00, >00, >18, >18, >00, >00, >00
-       BYTE >00, >00, >00, >18, >18, >00, >00, >00
-       BYTE >00, >00, >00, >18, >18, >00, >00, >00
-       BYTE >00, >00, >00, >18, >18, >00, >00, >00
-       BYTE >00, >00, >00, >18, >18, >00, >00, >00
-       BYTE >00, >00, >00, >18, >18, >00, >00, >00
-       BYTE >00, >00, >00, >18, >18, >00, >00, >00
-       BYTE >00, >00, >00, >18, >18, >00, >00, >00       
+;* 1 2 4 8 1 2 4 8
+;* . . . . . . . .
+;* . . . . . . . .
+;* . . . . . . . .
+;* . . . x x . . .
+;* . . . x x . . .
+;* . . . . . . . .
+;* . . . . . . . .
+;* . . . . . . . .
+;
+;PAT0   BYTE >00, >00, >00, >18, >18, >00, >00, >00
+;
+;* 1 2 4 8 1 2 4 8
+;* . . . . . . . .
+;* . . . . . . . .
+;* . . . x x . . .
+;* . . x x x x . .
+;* . . x x x x . .
+;* . . . x x . . .
+;* . . . . . . . .
+;* . . . . . . . .
+;
+;PAT1   BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
+;
+;* 1 2 4 8 1 2 4 8
+;* . . . . . . . .
+;* . . . x x . . .
+;* . . x x x x . .
+;* . x x x x x x .
+;* . x x x x x x .
+;* . . x x x x . .
+;* . . . x x . . .
+;* . . . . . . . .
+;
+;PAT2   BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
+;
+;* 1 2 4 8 1 2 4 8
+;* . . . x x . . .
+;* . . x x x x . .
+;* . x x x x x x .
+;* x x x x x x x x
+;* x x x x x x x x
+;* . x x x x x x .
+;* . . x x x x . .
+;* . . . x x . . .
+;
+;PAT3   BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
 
-* 1 2 4 8 1 2 4 8
-* . . . . . . . .
-* . . . . . . . .
-* . . . x x . . .
-* . . x x x x . .
-* . . x x x x . .
-* . . . x x . . .
-* . . . . . . . .
-* . . . . . . . .
+COLTAB BYTE >F0,>70,>50,>40
+       BYTE >40,>50,>70,>F0
+       BYTE >F0,>90,>80,>60
+       BYTE >60,>80,>90,>F0
+       BYTE >F0,>70,>50,>40
+       BYTE >40,>50,>70,>F0
+       BYTE >F0,>90,>80,>60
+       BYTE >60,>80,>90,>F0
+       BYTE >F0,>30,>20,>C0
+       BYTE >C0,>20,>30,>F0
+       BYTE >F0,>E0,>B0,>A0
+       BYTE >A0,>B0,>B0,>E0
+       BYTE >F0,>70,>50,>40
+       BYTE >40,>50,>70,>F0
+       BYTE >F0,>90,>80,>60
+       BYTE >60,>80,>90,>F0
 
-PAT1   BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
-       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
-       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
-       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
-       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
-       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
-       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00
-       BYTE >00, >00, >18, >3C, >3C, >18, >00, >00       
-
-* 1 2 4 8 1 2 4 8
-* . . . . . . . .
-* . . . x x . . .
-* . . x x x x . .
-* . x x x x x x .
-* . x x x x x x .
-* . . x x x x . .
-* . . . x x . . .
-* . . . . . . . .
-
-PAT2   BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
-       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
-       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
-       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
-       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
-       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
-       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00
-       BYTE >00, >18, >3C, >7E, >7E, >3C, >18, >00       
-
-* 1 2 4 8 1 2 4 8
-* . . . x x . . .
-* . . x x x x . .
-* . x x x x x x .
-* x x x x x x x x
-* x x x x x x x x
-* . x x x x x x .
-* . . x x x x . .
-* . . . x x . . .
-
-PAT3   BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
-       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
-       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
-       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
-       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
-       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
-       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18
-       BYTE >18, >3C, >7E, >FF, >FF, >7E, >3C, >18       
-       
-COLTAB BYTE >F0, >F0, >F0, >F0, >F0, >F0, >F0, >F0
-       BYTE >70, >70, >70, >70, >70, >70, >70, >70
-       BYTE >50, >50, >50, >50, >50, >50, >50, >50
-       BYTE >40, >40, >40, >40, >40, >40, >40, >40
-       BYTE >40, >40, >40, >40, >40, >40, >40, >40
-       BYTE >50, >50, >50, >50, >50, >50, >50, >50
-       BYTE >70, >70, >70, >70, >70, >70, >70, >70
-       BYTE >F0, >F0, >F0, >F0, >F0, >F0, >F0, >F0
-       BYTE >F0, >F0, >F0, >F0, >F0, >F0, >F0, >F0
-       BYTE >90, >90, >90, >90, >90, >90, >90, >90
-       BYTE >80, >80, >80, >80, >80, >80, >80, >80
-       BYTE >60, >60, >60, >60, >60, >60, >60, >60
-       BYTE >60, >60, >60, >60, >60, >60, >60, >60
-       BYTE >80, >80, >80, >80, >80, >80, >80, >80
-       BYTE >90, >90, >90, >90, >90, >90, >90, >90
-       BYTE >F0, >F0, >F0, >F0, >F0, >F0, >F0, >F0       
-       
-       
 NTPLSM
        COPY "ntplasma.a99"
 
        EVEN
-NTSTRT MOVB @R0LB, @VDPWA  
+NTSTRT MOVB @R0LB, @VDPWA
        MOVB R0, @VDPWA
-       LI   R0, R5LB
-       LI   R3, 768
-NTLP1  MOVB *R0,*R4
-       INC  R1
-       MOV  *R1, R5
-       A    R2, R5
+       MOVB @R2LB,R2
+*      First half
+       LI   R3, 768/4
+NTLP1  MOV  *R1+, R5                   ; Read 2 map bytes to R5
+       A    R2, R5                     ; Add time
+       MOVB R5, *R4                    ; Write byte in R5 to VDP
+       MOVB @R5LB, *R4                 ; Write byte in R5 to VDP
+       DEC  R3
+       JNE  NTLP1
+*      Play music
        LWPI CTRLWP
        BL   @PLAYSNG
        LWPI FXWP
+*      Second half
+       LI   R3, 768/4
+NTLP2  MOV  *R1+, R5                   ; Read 2 map bytes to R5
+       A    R2, R5                     ; Add time
+       MOVB R5, *R4                    ; Write byte in R5 to VDP
+       MOVB @R5LB, *R4                 ; Write byte in R5 to VDP
        DEC  R3
-       JNE  NTLP1
+       JNE  NTLP2
        RT
        EVEN
 NTEND
-       
+
 *********************************************************************
 * Frame rendering routine
 *
@@ -257,10 +280,6 @@ FRAME
        MOV  R11, @SAVR11
 * Save original register values (or change workspaces from >8300)
        LWPI FXWP
-
-* Enable the screen
-       LI   R0,>01E2
-       BL   @VWTR
 
 * Run nametable generator in scratchpad ram
        LI   R1, NTPLSM
