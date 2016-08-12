@@ -13,6 +13,8 @@
 * Array of pointers to songs in case we want to store multiple songs in
 * one bank.       
        DATA LATIN
+       DATA VAPOR
 
 LATIN  BCOPY "../../data/latin.vgm.30.spf"
+VAPOR  BCOPY "../../data/hard_vapor.vgm.spf"
        END
