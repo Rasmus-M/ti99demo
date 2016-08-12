@@ -3402,6 +3402,11 @@
         BYTE 3, 11
         DATA >0017
         BYTE 8, 25
+
+* Reset
+        DATA >0000
+        DATA >0000
+
 * Frame 481
         DATA >FFE3
         BYTE 7, 36
