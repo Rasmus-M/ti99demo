@@ -51,7 +51,6 @@ VDPINT DATA >0000
 
 * Disk access routines
        COPY "dsrlnk.a99"
-       COPY "gpllnk.a99"
 
 *********************************************************************
 * Draw Bitmap
@@ -456,7 +455,7 @@ LDADDR DATA >0000                * Data buffer address (VDP RAM)
        DATA >0000                * Record length: n/a
        DATA >2100                * Max bytes to read
        DATA >000A                * File name length (including DSK1.)
-DNAME  TEXT "DSK0."              * File device
+DNAME  TEXT "DSK1."              * File device
 FNAME  TEXT "DEMOA"              * File name
 PABDTE
 
@@ -548,6 +547,21 @@ LSLP   MOV  *R1+,*R0+
 LSR1   DATA >0000
 LSR11  DATA >0000
        
+*********************************************************************
+* VDP RAM Single Byte Read
+* Reads the VDP RAM address indicated in Register 0 to the 
+* most-significant byte of Register 1
+* Changes R1 MSB
+*********************************************************************
+       EVEN
+VSBR   SWPB R0
+       MOVB R0,@VDPWA
+       SWPB R0
+       MOVB R0,@VDPWA
+       NOP
+       MOVB @VDPRD,R1
+       RT
+
 *********************************************************************
 * VDP RAM Single Byte Write
 * Writes the value in the most-significant byte of Register 1 to the
@@ -722,9 +736,36 @@ FILES   MOV  R11,@FSAVR11              ; Push return address onto the stack
 NFILES  DATA >0001                     ; Number of simultaneous files
 PDATA   DATA >0116                     ; DSR subprogram to run (FILES)
 FSAVR11 DATA >0000
+       
+********************************************************************************
+* Read a sector from a disk (tursi)
+* R0: Sector to read (0-719 in this app)
+* R1: VDP address for the sector (256 bytes)
+* Reuses some of the buffers from FILES function
+* Sector is written to >1000
+********************************************************************************
+RSECT   MOV  R11,@FSAVR11              ; Push return address onto the stack
+        MOV  R0,@>8350                 ; Save sector index argument
+        MOV  R1,@>834E                 ; save VDP buffer address
+        LI   R0,PAB
+        LI   R1,SDATA
+        LI   R2,2
+        BL   @VMBW                     ; Copy 2 bytes from SDATA (RAM) to PAB (VRAM)
+        LI   R0,PAB
+        MOV  R0,@>8356                 ; Point to subroutine in DSR
+        MOVB @DNAME+3,R0               ; get DSK'n'
+        AI   R0,->3000                 ; make index
+        MOVB R0,@>834C                 ; save it off
+        BLWP @DSRLNK                   ; Call DSR with subprogram option
+        DATA 10
+*       Return
+        MOV  @FSAVR11,R11
+        B    *R11
+SDATA   DATA >0110                     ; DSR subprogram to run (Read Sector)
 
        .endif
-       
+
+
        .ifdef SAMS
 
 ***************************************************************************
@@ -843,20 +884,23 @@ CTRL
 * By Bruce Harrison 1991
 * Thanks to Asmusr for hooking me up with this.
        .ifndef CARTRIDGE
-       MOV    @>83D0,R12           * GET THE CRU BASE IN R12
-       MOV    @>83D2,R9            * GET THE ROM ADDRESS FOR DEVICE
+       MOV    @>83D0,R12           * GET THE CRU BASE IN R12 (officially should use >2032?)
+       MOV    @>83D2,R9            * GET THE ROM ADDRESS FOR DEVICE (should use >2034?)
        SBO    0                    * ENABLE THE ROM
        AI     R9,4                 * ADDING FOUR PUTS US AT THE LENGTH BYTE
        MOVB   *R9+,R4              * PLACE THAT IN R4 AND INCREMENT R9
        SRL    R4,8                 * RIGHT JUSTIFY LENGTH IN R4
+       CI     R4,4                 * DSR MAX LEN IS 7, BUT OURS IS ONLY 4!
+       JH     SKIPMV               * DON'T COPY IF TOO LONG, USER WILL SEE DSK1 HIT
        LI     R10,DNAME            * POINT TO TEXT BUFFER
 MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
        DEC    R4                   * FINISHED?
        JNE    MOVIT                * NO, DO ANOTHER BYTE
+SKIPMV       
        SBZ    0                    * DISABLE THE ROM
        .endif
        
-* If we're loading from disk, reduce the number of simultaneous files to 1
+* If we're loading from disk, setup dsrlnk & reduce the number of simultaneous files to 1
        .ifndef CARTRIDGE
        LI   R0, 1
        BL   @FILES
@@ -874,6 +918,10 @@ MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
        LI   R0,>4200                ; 'B' for DEMOB
        MOVB R0,@FNAME+4
 
+       BL   @CHKSEC                 ; check if sector access is going to work
+       MOV  @SECTOR,R0              ; did we get it?
+       JNE  SECMOD                  ; yes, we don't need this read
+
        CLR  R0                      ; record 0
        LI   R1,2                    ; two records (256 bytes)
        BL   @READIT
@@ -881,6 +929,8 @@ MOVIT  MOVB   *R9+,*R10+           * MOV ONE BYTE FROM ROM TO TEXT BUFFER
        LI   R1,IDXBUF
        LI   R2,256
        BL   @VMBR
+
+SECMOD       
        .endif
        
 * Load all files to SAMS
@@ -945,24 +995,24 @@ LDSAMS CLR  R1
        SWPB R2
        MOVB R2,@VDPWD
 
-	   .ifdef PACKDISK
+       .ifdef PACKDISK
 
 *      Load from the packed file
-	   LI    R0,>1000            ; VDP address
-	   MOV   R0,@LDADDR
+       LI    R0,>1000            ; VDP address
+       MOV   R0,@LDADDR
        MOV   R7,R1               ; get index
-	   JEQ   SKPOVR              ; we don't cache DEMOA
-	   DEC   R1
+       JEQ   SKPOVR              ; we don't cache DEMOA
+       DEC   R1
        SLA   R1,2                ; multiply by 4 to make an index
        MOV   @IDXBUF(R1),R0      ; get file index
        MOV   @IDXBUF+2(R1),R1    ; get file length
        BL    @READI2             ; bring it into VDP (with address preset)
-	   
-	   .else
+     
+       .else
 
 *      Update the file name we're loading
        MOV   R7,R0                     ; Get index
-	   JEQ   SKPOVR                    ; no point loading DEMOA
+       JEQ   SKPOVR                    ; no point loading DEMOA
        AI    R0,65                     ; R0 + 'A'
        SWPB  R0
        MOVB  R0,@FNAME+4
@@ -977,7 +1027,7 @@ LDSAMS CLR  R1
        BLWP  @DSRLNK                   ; Open file
        DATA  8
 
-	   .endif
+     .endif
 
 *      Map SAMS banks to >A000->BFFF
 SKPOVR
@@ -1159,10 +1209,15 @@ WPBU    DATA >0000, >0000, >0000, >0000, >0000, >0000, >0000, >0000
 
 *
 * Read R1 records starting at R0 to VDP >0000
+* Or set LDADDR with the target and call READI2 instead.
+* 
+* If SECTOR is non-zero, will use direct sector reads
+* In that case, R0 is the first sector and R1 is the count
 *
 READCN DATA >0000
 READRC DATA >0000
 READRT DATA >0000
+SECSIZ DATA >0100
 
 READIT
        CLR   @LDADDR            ; VDP >0000
@@ -1172,8 +1227,26 @@ READI2
        MOV   R11,@READRT
        MOV   R0,@READRC
        MOV   R1,@READCN
+       
+* check for sector mode
+       MOV   @SECTOR,R0
+       JEQ   READREC
+       
+* sector mode here - the index was patched up at boot
+* so we already have the information we care about
+SECLP
+       MOV   @LDADDR,R1         ; get VDP buffer
+       A     @SECSIZ,@LDADDR    ; add 256 for next sector
+       MOV   @READRC,R0         ; get sector index
+       INC   @READRC            ; add 1 for next sector
+       BL    @RSECT             ; go get it
+       DEC   @READCN            ; count down
+       JNE   SECLP              ; keep reading
+       MOV   @READRT,R11
+       B     *R11               ; back to caller
 
 * set PAB to open mode for INT/FIX 128
+READREC
        LI    R0,>0008           ; OPEN, INT/FIX
        MOV   R0,@PABDAT
        LI    R0,>8000           ; record length: 128
@@ -1237,7 +1310,119 @@ READLP
        MOV   @READRT,R11
        B *R11
        .endif
+       
+       .ifdef PACKDISK
+* This function checks if sector access works on the current controller
+* We need to have:
+* Disk index from 1-9 (since we're using boot tracking)
+* Ability to read index sectors
+* Ability to raw-read file sectors (ie: not through the sector-file access)
+* Unfragmented DEMOB file
+* We aren't using sector-file access because it still requires us to open/close
+* the file, meaning it won't be much faster than records.
+CHKNM   TEXT 'DEMOB '
+SECSAVE DATA >0000
 
+CHKSEC
+  MOV R11,@SECSAVE
+  CLR @SECTOR       assume no
+
+* Check DSK index - we won't support A-Z (or at least it's arbitrary their number)
+* They are usually RAMdisks or other superfast devices anyway. ;)
+  MOVB @DNAME+3,R0  get DSK'x' from PAB
+  SRL R0,8          make int
+  CI R0,>0031       '1'
+  JL NOSEC
+  CI R0,>0039       '9'
+  JH NOSEC
+  
+* Try to find DEMOB by raw sector reads of the index sectors
+* Sector 0 - disk information
+* Sector 1 - catalog index
+* Sector 2-> file descriptor records
+* Technically the FDRs can be anywhere, but in practice they are sequential
+* after sector 1. We own this disk image, so I can just search there.
+  LI R3,>0002
+SRCHLP
+  LI R0,>1000
+  LI R1,>FFFF
+  LI R2,48
+  BL @VMBS          * wipe buffer in VDP
+
+  MOV R3,R0         * read sector
+  LI R1,>1000       * VDP buffer
+  BL @RSECT         
+  INC R3            * if we need it
+  
+  LI R0,>1000
+  LI R1,IDXBUF
+  LI R2,48
+  BL @VMBR          * read data to CPU RAM
+  
+  MOV @IDXBUF+10,R0   convenient bytes to check for >0000
+  JNE NOSEC         * either didn't read the sector, or out of FDRs
+  
+  LI R0,IDXBUF
+  LI R1,CHKNM       * going to compare the filename
+  C  *R0+,*R1+
+  JNE SRCHLP
+  C  *R0+,*R1+
+  JNE SRCHLP
+  C  *R0+,*R1+
+  JNE SRCHLP        * six bytes is all we need
+  
+  LI R0,IDXBUF+31   * check that the second cluster is empty
+  MOVB *R0+,R1      * if any are non-zero, then it's fragmented
+  JNE NOSEC         * we can't cheat on fragmented files
+  MOVB *R0+,R1
+  JNE NOSEC
+  MOVB *R0+,R1
+  JNE NOSEC
+  
+  MOV @IDXBUF+28,R0   read the first two bytes of the cluster
+  SWPB R0           * convert UMSN to SNUM
+  ANDI R0,>0FFF     * and reduce to NUM
+  
+  MOV R0,R3         * save the sector index
+
+  LI R0,>1000
+  LI R1,>FFFF
+  LI R2,48
+  BL @VMBS          * wipe buffer in VDP
+  
+  MOV R3,R0
+  LI R1,>1000       * VDP buffer
+  BL @RSECT         * make sure we can read it
+
+  LI R0,>1000
+  LI R1,IDXBUF
+  LI R2,256
+  BL @VMBR          * read data to CPU RAM  
+  
+  LI R0,>0002       * the first two bytes MUST be >0002 (first index)
+  C R0,@IDXBUF
+  JNE NOSEC         * we didn't get it
+  
+  MOV R3,@SECTOR    * we did get it! and we got the index ;)
+  
+  LI R0,IDXBUF      * for performance, convert the record indexes to sectors
+  LI R2,64          * number of records
+IDXLP
+  MOV *R0,R1        * get offset
+  SRL R1,1          * divide by two
+  A @SECTOR,R1      * add the base sector
+  MOV R1,*R0+       * and write it back
+  MOV *R0,R1        * get length in records
+  INC R1            * round up
+  SRL R1,1          * divide by 2
+  MOV R1,*R0+       * and write it back
+  DEC R2            * next record
+  JNE IDXLP 
+
+NOSEC
+  MOV @SECSAVE,R11
+  RT
+       
 *********************************************************************
 * Scene List
 *
@@ -1272,9 +1457,11 @@ SCNLST
        DATA >001D, >1E00  ; Bank 29: Credits scroller                  Mode 1
        DATA >0000, >0000  ; Zero signifies reboot
 
-
        .ifdef PACKDISK
-* Data space for the first sector of the data file - contains the index
+       EVEN
+* start sector of DEMOB, or 0 if we can't use sector access      
+SECTOR DATA >0000
+* Data space for the first sector of the data file - contains the index (256 bytes)
 IDXBUF EQU $
        .endif
 

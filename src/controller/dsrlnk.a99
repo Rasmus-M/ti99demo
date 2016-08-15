@@ -1,67 +1,140 @@
-* DSRLNK
-* Based on code published in The Smart Programmer, issue 07/1986
-* Copyright (c) 1985, 1986 by Miller Graphics
-* NOTE: Code is self-modifying and cannot run in cartridge space.
+* Modified version of the E/A DSRLNK
+* modifications by Tursi
+* this version searches ROM DSRs only, so can
+* NOT work with GPL DSRs
 
-dsrlnk_type:
-       equ  >836d
-dsrlnk_namelen:
-       equ  >8356
-dsrlnk_gstat:
-       equ  >837c
-dsrlnk_putstk:
-       equ  >50
-gplws_4lb:
-       equ  >83e9
+* used by DSRLNK in general
+dsrlnk_namelen			equ >8356
+gplws								equ >83e0
+dsr_rombase					equ >4000
 
-dsrlnk:
-       data dsrlnk_ws, dsrlnk_main
+* used by the E/A DSRLNK
+dsrlnk_maxlen				equ >0007
+dsrlnk_crusearch		equ >83D0
+dsrlnk_entrysearch	equ >83D2
+dsrlnk_devlength		equ >8354
+dsrlnk_firstcard		equ >0F00
+dsrlnk_endsearch    equ >2000
 
-dsrlnk_ws:
-       equ  $
-dsrlnk_ws_3lb:
-       equ  dsrlnk_ws + 7
+* exported by E/A DSRLNK for disk tracking
+* CRU and Entry are used to speed up repeated calls (not E/A behaviour)
+* Entry tracks ONLY type '8', since 10 is less often called
+dsrlnk_trackcru			equ >2032
+dsrlnk_trackentry		equ >2034
+dsrlnk_trackdevlen	equ >2036
+dsrlnk_tracklength	equ >2038
+dsrlnk_trackcalls		equ >203A
 
-dsrlnk_main:
-       mov  r12, r12
-       jne  dsrlnk_redux
+* BLWP vectors
+DSRLNK	DATA DSRWP,EA3DSR
 
-       lwpi GPLWP
-       mov  @dsrlnk_putstk, r4
-       bl   *r4
-       li   r4, >11
-       movb r4, @>402(r13)
-       jmp  !
-       data 0, 0, 0, 0
-!      movb @gplws_4lb, @>402(r13)
-       mov  @gpllnk_getstk, r5
-       movb *r13, @dsrlnk_alb
-       inct @dsrlnk_ahb
-       bl   *r5
-       lwpi dsrlnk_ws
-       li   r12, >2000
+* used to manage the equal bit on return
+A20FC   DATA >2000
+  
+* holds period character and >AA for DSR header
+DSRDAT  DATA >2EAA  
 
-dsrlnk_redux:
-       inc  r14
-       movb *r14+, @dsrlnk_type
-       mov  @dsrlnk_namelen, r3
-       ai   r3, -8
-       blwp @gpllnk
-dsrlnk_ahb:
-       byte >03
-dsrlnk_alb:
-       byte >00
+* holds the device name temporarily
+NAMBUF 	BSS 8
 
-       movb @dsrlnk_ws_3lb, @vdpwa
-       movb r3, @vdpwa
-       szcb r12, r15
-       movb @vdpwd, r3
-       srl  r3, 5
-       movb r3, *r13
-       jne  !
-       coc  @dsrlnk_gstat, r12
-       jne  dsrlnk_done
-!      socb r12, r15
+* this is potentially a little wasteful	
+DSRWP		BSS 32
 
-dsrlnk_done:
-       rtwp
+* main entry point		
+EA3DSR
+	MOV  *14+,5	 															Get type into R5
+A22B2  
+  SZCB @>A20FC,15     											Zero out the EQUAL bit in the return CPU status
+  MOV  @dsrlnk_namelen,0			  						Get PAB pointer into R0
+	MOV  0,9																	Copy to R9
+	AI   9,-8           											pab status
+	BL @VSBR            											vsbr: read size (from R0 to MSB R1 - for DSK1.BLAH is 9)
+	MOVB 1,3																	copy to R3
+	SRL  3,8																	move into low byte (make a count)
+	SETO 4																		R4 = 0xffff
+	LI   2,NAMBUF       											name buffer in R2
+A22D0  
+	INC  0																		point to next byte of name (first byte on first pass)
+	INC  4																		increment R4 (becomes 0 on first pass)
+	C    4,3																	check if name finished
+	JEQ  A22E4          											Jump ahead if so
+	BL @VSBR																	vsbr: copy character of name
+	MOVB 1,*2+          											copy 1 char into name buffer
+	CB   1,@DSRDAT      											is it .?
+	JNE  A22D0																no, loop around
+A22E4  
+	MOV  4,4																	if we get here, we either got the whole length or a '.'
+	JEQ  A238C          											size=0, that's an error so skip out (no name to search)
+	CI   4,dsrlnk_maxlen											check against 7 characters (just the DSR name part)
+	JGT  A238C          											size>7 is too long, so error out
+	CLR  @dsrlnk_crusearch										clear the CRU base search
+	MOV  4,@dsrlnk_devlength									length of the name (excluding '.') goes into >8354
+	MOV  4,@dsrlnk_trackdevlen               	also goes into >2036 (this is the official place)
+	INC  4																		add one to name length
+	A    4,@dsrlnk_namelen										add to the PAB pointer (>8356 points to the period!)
+	MOV  @dsrlnk_namelen,@dsrlnk_tracklength	save the pointer at >2038, too
+	MOV  5,@gplws+10													copy our r5 to GPLWS
+	LWPI gplws                  							Load GPLWS to call the DSR with
+  CLR  1																		R1=0 for count (not sure the value of this...)
+  LI   12,dsrlnk_firstcard									CRU base to >0F00 (first card -1)
+A2310  
+	MOV  12,12																check base for 0
+  JEQ  A2316																if not 0, skip card off. Looks like a bug, it's never 0??
+	SBZ  0                      							card off
+A2316  
+	AI   12,>0100															next card (>1000 for first)
+  CLR  @dsrlnk_crusearch										clear CRU tracking at >83D0
+  CI   12,dsrlnk_endsearch									check if all cards are done
+  JEQ  A2388                  							if yes, we didn't find it, so error out
+  MOV  12,@dsrlnk_crusearch              		save cru base
+  SBO  0                      							card on
+  LI   2,dsr_rombase												read card header bytes
+  CB   *2,@DSRDAT+1           							>AA = header
+	JNE  A2310                  							no: loop back for next card
+  A    5,2            											offset (contains the DATA statement, so 8 for a device, 10 for sub)
+	JMP  A2340																always jump into the loop from here
+A233A  
+	MOV  @dsrlnk_entrysearch,2               	next sub
+	SBO  0                      							card on (already is, isn't it??)
+A2340  
+	MOV  *2,2                   							grab link pointer to next
+  JEQ  A2310                  							If no pointer, link back to get next card
+  MOV  2,@dsrlnk_entrysearch               	save link address in >83D2
+  INCT 2																		point to entry address
+  MOV  *2+,9                  							save address in R9
+  MOVB @dsrlnk_devlength+1,5								get DSR name length (low byte of >8354)
+  JEQ  A2364                  							size=0, so take it 
+  CB   5,*2+																compare length to length in DSR
+  JNE  A233A                  							diff size: loop back for next
+  SRL  5,8																	make length a word value
+  LI   6,NAMBUF               							name buffer pointer in R6
+A235C  
+	CB   *6+,*2+                							check name
+  JNE  A233A                  							diff name: loop back for next entry
+  DEC  5																		count down length
+  JNE  A235C                  							not done yet: next char
+A2364  
+	INC  1                      							if we get here, everything matched, increment # calls
+  MOV  1,@dsrlnk_trackcalls               	save # of calls
+	MOV  9,@dsrlnk_trackentry               	save address
+	MOV  12,@dsrlnk_trackcru              		save cru base
+  BL   *9                     							link
+	JMP  A233A                  							check next entry on the same card -- most DSRs will skip this 
+  SBZ  0                      							card off
+  LWPI DSRWP
+  MOV  9,0
+	BL @VSBR	                 								read pab status
+  SRL  1,13
+  JNE  A238E                  							err
+	RTWP
+	
+A2388  
+	LWPI DSRWP                   							errors
+A238C  
+	CLR  1                       							code 0
+A238E  
+	SWPB 1
+  MOVB R1,R0                   							code in r0
+	SOCB @A20FC,15               							eq=1
+	RTWP
+	

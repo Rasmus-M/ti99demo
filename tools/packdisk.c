@@ -1,8 +1,9 @@
 // Simple tool to pack all the demo files together with a small directory
-// at the beginning. All files are 128-byte aligned so we can read them
-// with the record function
-// Index is two bytes of offset and two bytes of length
-// First two records are index (allows room for 64 files)
+// at the beginning. All files are 256-byte aligned so we can read them
+// as sectors. Each record is 128 bytes so record load is non-wasteful
+// (though it is slower due to the larger number of DSRLNK calls).
+// Index is two bytes of offset (in 128 byte records) and two bytes of length (in bytes)
+// First two records are index (256 bytes, allows room for 64 files)
 // remaining sectors are data.
 
 #include <stdio.h>
