@@ -1359,7 +1359,7 @@ SRCHLP
   LI R2,48
   BL @VMBR          * read data to CPU RAM
   
-  MOV @IDXBUF+10,R0 * convenient bytes to check for >0000
+  MOV @IDXBUF+10,R0   convenient bytes to check for >0000
   JNE NOSEC         * either didn't read the sector, or out of FDRs
   
   LI R0,IDXBUF
@@ -1379,7 +1379,7 @@ SRCHLP
   MOVB *R0+,R1
   JNE NOSEC
   
-  MOV @IDXBUF+28,R0 * read the first two bytes of the cluster
+  MOV @IDXBUF+28,R0   read the first two bytes of the cluster
   SWPB R0           * convert UMSN to SNUM
   ANDI R0,>0FFF     * and reduce to NUM
   
