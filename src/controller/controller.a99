@@ -742,7 +742,6 @@ FSAVR11 DATA >0000
 * R0: Sector to read (0-719 in this app)
 * R1: VDP address for the sector (256 bytes)
 * Reuses some of the buffers from FILES function
-* Sector is written to >1000
 ********************************************************************************
 RSECT   MOV  R11,@FSAVR11              ; Push return address onto the stack
         MOV  R0,@>8350                 ; Save sector index argument
