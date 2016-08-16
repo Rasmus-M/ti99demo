@@ -1,67 +1,138 @@
-* DSRLNK
-* Based on code published in The Smart Programmer, issue 07/1986
-* Copyright (c) 1985, 1986 by Miller Graphics
-* NOTE: Code is self-modifying and cannot run in cartridge space.
+*********************************************************************
+*
+* All-purpose 'DSRLNK'
+*
+* Found at 
+* http://atariage.com/forums/topic/163692-ea-file-access/#entry2071618
+*
+* This is essentially the same routine used by Editor/Assembler
+*
 
-dsrlnk_type:
-       equ  >836d
-dsrlnk_namelen:
-       equ  >8356
-dsrlnk_gstat:
-       equ  >837c
-dsrlnk_putstk:
-       equ  >50
-gplws_4lb:
-       equ  >83e9
+*
+* Useful scratchpad data (see also SAVE vars below for more persistent)
+* >8354 - length of device name found
+* >8356 - pointer to DSR name length in PAB (input)
+* >83D0 - CRU base used
+* >83D2 - address of DSR entry used
+*
 
-dsrlnk:
-       data dsrlnk_ws, dsrlnk_main
+DREGS  BSS  >20
+DSRLNK DATA DREGS,DSR1
+SAVE1  DATA >0000       ; CRU address used (2032 in E/A)
+SAVE2  DATA >0000       ; Address of function called (2034)
+SAVE3  DATA >0000       ; Length of device name found (2036)
+SAVE4  DATA >0000       ; Pointer to DSR filename in PAB (2038)
+SAVE5  DATA >0000       ; some sort of call counter...? (203A)
+NAMBUF BSS  8
+*
+HEX20  DATA >2020
+HEXAA  DATA >AAAA
+PERIOD BYTE '.','.'
+H2000  DATA >2000
+CYC1   DATA 0
+H1300  DATA >1300
+ 
+DSR1   MOV  *R14+,R5
+       SZCB @HEX20,R15
+       MOV  @>8356,R0
+       MOV  R0,R9
+       AI R9,>FFF8
+       SWPB R0
+       MOVB R0,@VDPWA
+       SWPB R0
+       MOVB R0,@VDPWA
+       NOP
+       MOVB @VDPRD,R1
+       MOVB R1,R3
+       SRL  R3,>8
+       SETO R4
+       LI R2,NAMBUF
+DLOOP1 INC  R0
+       INC  R4
+       C  R4,R3
+       JEQ  DJUMP1
+       SWPB R0
+       MOVB R0,@VDPWA
+       SWPB R0
+       MOVB R0,@VDPWA
+       NOP
+       MOVB @VDPRD,R1
+       MOVB R1,*R2+
+       CB R1,@PERIOD
+       JNE  DLOOP1
+DJUMP1 MOV  R4,R4
+       JEQ  DJUMP6
+       CI R4,>0007
+       JGT  DJUMP6
+       CLR  @>83D0
+       MOV  R4,@>8354
+       MOV  R4,@SAVE3
+       INC  R4
+       A  R4,@>8356
+       MOV  @>8356,@SAVE4
+SROM   LWPI >83E0
+       CLR  R1
+       MOV  @H2000,@CYC1
+       LI R12,>1100
+       JMP  DLOOP2
+SROM1  LI R12,>0F00
+       MOV  @H1300,@CYC1
+DLOOP2 MOV  R12,R12
+       JEQ  DJUMP2
+       SBZ  >00
+DJUMP2 AI R12,>0100
+       CLR  @>83D0
+       CI R12,>2000
+       JEQ  SROM1
+       C  R12,@CYC1
+       JEQ  DJUMP5
+       MOV  R12,@>83D0
+       SBO  >00
+       LI R2,>4000
+       CB *R2,@HEXAA
+       JNE  DLOOP2
+       A  @5*2+DREGS,R2
+       JMP  DJUMP3
+DLOOP3 MOV  @>83D2,R2
+       SBO  >00
+DJUMP3 MOV  *R2,R2
+       JEQ  DLOOP2
+       MOV  R2,@>83D2
+       INCT R2
+       MOV  *R2+,R9
+       MOVB @>8355,R5
+       JEQ  DJUMP4
+       CB R5,*R2+
+       JNE  DLOOP3
+       SRL  R5,>8
+       LI R6,NAMBUF
+DLOOP4 CB *R6+,*R2+
+       JNE  DLOOP3
+       DEC  R5
+       JNE  DLOOP4
+DJUMP4 INC  R1
+       MOV  R1,@SAVE5
+       MOV  R9,@SAVE2
+       MOV  R12,@SAVE1
+       BL *R9
+       JMP  DLOOP3
+       SBZ  >00
+       LWPI DREGS
+       MOV  R9,R0
+       SWPB R0
+       MOVB R0,@VDPWA
+       SWPB R0
+       MOVB R0,@VDPWA
+       NOP
+       MOVB @VDPRD,R1
+       SRL  R1,>D
+       JNE  DJUMP7
+       RTWP
+DJUMP5 LWPI DREGS
+DJUMP6 CLR  R1
+DJUMP7 SWPB R1
+       MOVB R1,*R13
+       SOCB @HEX20,R15
+       RTWP
+*// DSRLNK
 
-dsrlnk_ws:
-       equ  $
-dsrlnk_ws_3lb:
-       equ  dsrlnk_ws + 7
-
-dsrlnk_main:
-       mov  r12, r12
-       jne  dsrlnk_redux
-
-       lwpi GPLWP
-       mov  @dsrlnk_putstk, r4
-       bl   *r4
-       li   r4, >11
-       movb r4, @>402(r13)
-       jmp  !
-       data 0, 0, 0, 0
-!      movb @gplws_4lb, @>402(r13)
-       mov  @gpllnk_getstk, r5
-       movb *r13, @dsrlnk_alb
-       inct @dsrlnk_ahb
-       bl   *r5
-       lwpi dsrlnk_ws
-       li   r12, >2000
-
-dsrlnk_redux:
-       inc  r14
-       movb *r14+, @dsrlnk_type
-       mov  @dsrlnk_namelen, r3
-       ai   r3, -8
-       blwp @gpllnk
-dsrlnk_ahb:
-       byte >03
-dsrlnk_alb:
-       byte >00
-
-       movb @dsrlnk_ws_3lb, @vdpwa
-       movb r3, @vdpwa
-       szcb r12, r15
-       movb @vdpwd, r3
-       srl  r3, 5
-       movb r3, *r13
-       jne  !
-       coc  @dsrlnk_gstat, r12
-       jne  dsrlnk_done
-!      socb r12, r15
-
-dsrlnk_done:
-       rtwp
