@@ -751,7 +751,7 @@ RSECT   MOV  R11,@FSAVR11              ; Push return address onto the stack
         LI   R2,2
         BL   @VMBW                     ; Copy 2 bytes from SDATA (RAM) to PAB (VRAM)
         LI   R0,PAB
-        MOV  R0,@>8356                 ; Point to subroutine in DSR
+        MOV  R0,@>8356                 ; Point to PAB subroutine
         MOVB @DNAME+3,R0               ; get DSK'n'
         AI   R0,->3000                 ; make index
         MOVB R0,@>834C                 ; save it off
@@ -883,8 +883,8 @@ CTRL
 * By Bruce Harrison 1991
 * Thanks to Asmusr for hooking me up with this.
        .ifndef CARTRIDGE
-       MOV    @>83D0,R12           * GET THE CRU BASE IN R12 (officially should use >2032?)
-       MOV    @>83D2,R9            * GET THE ROM ADDRESS FOR DEVICE (should use >2034?)
+       MOV    @>83D0,R12           * GET THE CRU BASE IN R12
+       MOV    @>83D2,R9            * GET THE ROM ADDRESS FOR DEVICE
        SBO    0                    * ENABLE THE ROM
        AI     R9,4                 * ADDING FOUR PUTS US AT THE LENGTH BYTE
        MOVB   *R9+,R4              * PLACE THAT IN R4 AND INCREMENT R9
@@ -1233,14 +1233,38 @@ READI2
        
 * sector mode here - the index was patched up at boot
 * so we already have the information we care about
-SECLP
+* get the first sector the 'slow' way to set things up
        MOV   @LDADDR,R1         ; get VDP buffer
-       A     @SECSIZ,@LDADDR    ; add 256 for next sector
        MOV   @READRC,R0         ; get sector index
-       INC   @READRC            ; add 1 for next sector
        BL    @RSECT             ; go get it
-       DEC   @READCN            ; count down
-       JNE   SECLP              ; keep reading
+       
+* now we can read the rest of the sectors more quickly
+			 MOV   @READRC,R0         ; sector
+			 MOV   @LDADDR,R1         ; VDP address
+       MOV   @READCN,R2         ; count
+       MOVB  @DNAME+3,R3        ; get DSK'n'
+       AI    R3,->3000          ; make index
+
+       MOV   @SAVE1,R12         ; CRU base
+       SBO   0                  ; card on
+       
+SECLP  DEC   R2                 ; countdown
+       JEQ   SECDN              ; all done
+       
+       INC   R0                 ; next sector
+       AI    R1,>0100           ; next address
+       MOV   R0,@>8350          ; sector index
+       MOV   R1,@>834E          ; VDP buffer address
+       MOVB  R3,@>834C          ; disk index
+       
+       LWPI  GPLWP              ; Get GPLWS for DSR call
+       MOV   @SAVE2,R9          ; get saved function entry point
+       BL    *R9                ; call it
+       NOP                      ; DSR should skip this
+       LWPI  CTRLWP             ; back to our WP
+       JMP   SECLP              ; loop around
+       
+SECDN  SBZ   0                  ; card off
        MOV   @READRT,R11
        B     *R11               ; back to caller
 
