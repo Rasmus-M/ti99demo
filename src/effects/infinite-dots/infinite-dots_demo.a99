@@ -394,15 +394,26 @@ DRAW5  MOV  R11,*R10+                  ; Push return address onto the stack
 *      Select first pattern table
        LI   R0,>0400
        BL   @VWTR
-*      Draw stars (interleaved - modified by Tursi)
-       CLR  @TICK
+
+*      Draw 7 stars interleaved by COUNT
        LI   R0,7
        MOV  R0,@COUNT
+       
+DRAW53
+*      Draw each star line by line interleaved by PTCNTR
+       LI   R0,STAR
+       MOV  *R0,@PTCNTR                ; First word is number of points
+
+DRAW52       
+*      Draw each frame interleaved by TICK
+       CLR  @TICK
+       CLR  R1
+       
 *      Pattern table drawing base
 DRAW51 ANDI R1,3
        SLA  R1,11
        MOV  R1,@VDPPAT
-*      Draw stars
+*      Calculate X and Y by COUNT       
        LI   R2,60
        MOV  @COUNT,R0
        CLR  R1
@@ -413,24 +424,31 @@ DRAW51 ANDI R1,3
        CLR  R1
        MPY  R2,R0
        MOV  R1,@Y
-*      Draw a star
-DRAW53 LI   R0,STAR                    ; Contains base address of shape data structure
+*      Draw a star's line
+       LI   R0,STAR                    ; Contains base address of shape data structure
        MOV  @TICK,R1                   ; Number of the frame to draw (zero based)
        A    @COUNT,R1
        ANDI R1,3
        MOV  @X,R2                      ; Translation x
        MOV  @Y,R3                      ; Translation y
-       BL   @SHAPE
-*      Next star
+       BL   @SHAPE                     ; now only draws ONE line based on PTCNTR 
+
+*      Next frame
        INC  @TICK
        MOV  @TICK,R1
        CI   R1,4
        JNE  DRAW51
-       CLR  @TICK
+       
+*      Next line
+       DEC  @PTCNTR                    ; Test for more points
+       JNE  DRAW52
+
+*      Next star
        DEC  @COUNT
-       JNE  DRAW51
-*      done
-DRAW52 INC  @STATE
+       JNE  DRAW53
+       
+*      Done
+       INC  @STATE
        CLR  @TICK
 *      Return
        DECT R10                        ; Pop return address off the stack
@@ -578,12 +596,15 @@ DOT    MOV  R11,*R10+                  ; Push return address onto the stack
 * R2   Translation x
 * R3   Translation y
 *
+* Modified by Tursi - PTCNTR is set externally and this function
+* uses it to select and draw a single line from the shape table (**)
+*
 SHAPE  MOV  R11,*R10+                  ; Push return address onto the stack
        MOV  R2,@TRANSX                 ; Save translation x
        MOV  R3,@TRANSY                 ; Save translation y
        MOV  *R0+,R3                    ; First word is number of points
        MOV  R3,@POINTS                 ; Save number of points
-       MOV  R3,@PTCNTR                 ; Also save in counter
+**     MOV  R3,@PTCNTR                 ; Also save in counter
        MOV  R1,R1                      ; Check if frame #0
        JEQ  FRAME0                     ; Skip calculation of frame address
        SLA  R3,2                       ; Multiply points by 4 to get bytes per frame
@@ -592,10 +613,19 @@ FRADDR A    R3,R0                      ; Advance frame address one frame
        JNE  FRADDR                     ; Result is R0 += R1 * R3
 FRAME0 MOV  R0,R4                      ; R4 is frame address
        MOV  R4,@SHADDR                 ; Save the frame address
+       
+       MOV  @POINTS,R5
+FINDPT       
+       C    @PTCNTR,R5
+       JEQ  SGLOOP
+       DEC  R5
+       AI   R4,4
+       JMP  FINDPT
+       
 *      Segment loop
 SGLOOP MOV  *R4+,R0                    ; Read x1
        MOV  *R4+,R1                    ; Read y1
-       MOV  R4,@PTADDR                 ; Save current address (start of next segment)
+**     MOV  R4,@PTADDR                 ; Save current address (start of next segment)
        MOV  @PTCNTR,R5                 ; Get point counter
        CI   R5,1                       ; Is this the last point?
        JEQ  LASTPT
@@ -606,24 +636,25 @@ LASTPT MOV  @SHADDR,R4
        MOV  *R4+,R2                    ; Read x2 from first point
        MOV  *R4,R3                     ; Read y2 from first point
 *      Transformations
-TRFRM  C    @POINTS,R5                 ; Only transform x1,y1 for first segment
-       JEQ  TRFRM1
-       MOV  @LASTX,R0                  ; For following segments use endpoint
-       MOV  @LASTY,R1                  ; of previous segment
-       JMP  TRFRM2
+TRFRM  
+**     C    @POINTS,R5                 ; Only transform x1,y1 for first segment
+**     JEQ  TRFRM1
+**     MOV  @LASTX,R0                  ; For following segments use endpoint
+**     MOV  @LASTY,R1                  ; of previous segment
+**     JMP  TRFRM2
 TRFRM1 A    @TRANSX,R0                 ; Translate origin
        A    @TRANSY,R1
 TRFRM2 A    @TRANSX,R2                 ; Translate origin
        A    @TRANSY,R3
 *      Draw segment
-       MOV  R2,@LASTX                  ; Save to use as start point of next segment
-       MOV  R3,@LASTY
-       MOV  R5,@PTCNTR                 ; Save point counter
+**     MOV  R2,@LASTX                  ; Save to use as start point of next segment
+**     MOV  R3,@LASTY
+**     MOV  R5,@PTCNTR                 ; Save point counter
        BL   @LINE                      ; Draw segment
        BL   @ISR
-       MOV  @PTADDR,R4                 ; Prepare to read next segment
-       DEC  @PTCNTR                    ; Test for more points
-       JNE  SGLOOP
+**     MOV  @PTADDR,R4                 ; Prepare to read next segment
+**     DEC  @PTCNTR                    ; Test for more points
+**     JNE  SGLOOP
 *      Return
        DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
