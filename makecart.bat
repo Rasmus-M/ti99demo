@@ -3,7 +3,7 @@ python tools\xdt99\xas99.py -b -R -L controller.lst -D CARTRIDGE -o .\src\bin\de
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo1 --base 0x6000 .\src\effects\mstexas\mstexas.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo2 --base 0x6000 .\src\effects\mstexas\mstexas-tiap-pack.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo3 --base 0x6000 .\src\effects\dotfx\dotfx.a99 
-python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo4 --base 0x6000 .\src\effects\empty\empty.a99
+python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo4 --base 0x6000 .\src\effects\music\songbank3.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo5 --base 0x6000 .\src\effects\music\songbank1.a99 
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo6 --base 0x6000 .\src\effects\raycaster\raycaster.a99 
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo7 --base 0x6000 .\src\effects\raycaster\casterdata.a99
@@ -13,7 +13,6 @@ python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo10 --base 0x6000
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo11 --base 0x6000 .\src\effects\ball\ball-mask-shadow_demo.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo12 --base 0x6000 .\src\effects\twist2\twist_demo.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo13 --base 0x6000 .\src\effects\empty\empty.a99
-rem python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo13 --base 0x6000 .\src\effects\twist2\twistmap_demo.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo14 --base 0x6000 .\src\effects\multiplane\multiplane.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo15 --base 0x6000 .\src\effects\2dscroller\2dscroller_demo.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo16 --base 0x6000 .\src\effects\checkerboard\chkbrd_demo.a99

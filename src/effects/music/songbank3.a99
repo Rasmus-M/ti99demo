@@ -1,6 +1,6 @@
 *********************************************************************
-* Filename: songbank2.a99
-* Bank:     30
+* Filename: songbank3.a99
+* Bank:     4
 * Date:     05/01/2016
 * Author:   orbitaldecay
 * 
@@ -12,9 +12,7 @@
        
 * Array of pointers to songs in case we want to store multiple songs in
 * one bank.       
-       DATA LATIN
-       DATA VAPOR
+       DATA HAUS7
 
-LATIN  BCOPY "../../data/latin.vgm.30.spf"
-VAPOR  BCOPY "../../data/hard_vapor.vgm.spf"
+HAUS7  BCOPY "../../data/haus7.vgm.spf"
        END

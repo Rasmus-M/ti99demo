@@ -1,5 +1,5 @@
 *********************************************************************
-* Filename: DEMO3.A99
+* Filename: songbank1.a99
 * Bank:     5
 * Date:     05/01/2016
 * Author:   orbitaldecay
@@ -14,9 +14,7 @@
 * one bank.       
        DATA CHAOS
 ;       DATA RAEL
-;       DATA HOUSE
 
 CHAOS  BCOPY "../../data/collision_chaos.vgm.spf"
 ;RAEL   BCOPY "../../data/rael_v2_spf30hz.vgm"
-;HOUSE  BCOPY "../../data/ti99house.vgm.spf"
        END

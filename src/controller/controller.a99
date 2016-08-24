@@ -1467,13 +1467,13 @@ SCNLST
        DATA >0016, >0500  ; Bank 22: Infinite dots                     Mode 1
        DATA >0015, >0500  ; Bank 21: Multicolor rotozoom               Mode 3
        DATA >0011, >0500  ; Bank 17: Infinite bobs                     Mode 2
-       DATA >000A, >0500  ; Bank 10: Boing ball                        Mode 2 hybrid
-       DATA >0010, >0500  ; Bank 16: Checkerboard zoom                 Mode 1
-       DATA >000E, >1E01  ; Bank 14: Multiplane                        Mode 1
-       DATA >0009, >1E01  ; Bank 9: Metaballs                          Mode 1
-       DATA >0006, >1E01  ; Bank 6: Raycaster                          Mode 2
-       DATA >0003, >1E01  ; Bank 3: Dot fx                             Mode 2 hybrid
-       DATA >0001, >1E01  ; Bank 1: Ms Texas                           Mode 2/3 flicker
+       DATA >000A, >0400  ; Bank 10: Boing ball                        Mode 2 hybrid
+       DATA >0010, >0400  ; Bank 16: Checkerboard zoom                 Mode 1
+       DATA >000E, >0400  ; Bank 14: Multiplane                        Mode 1
+       DATA >0009, >0400  ; Bank 9: Metaballs                          Mode 1
+       DATA >0006, >0400  ; Bank 6: Raycaster                          Mode 2
+       DATA >0003, >0400  ; Bank 3: Dot fx                             Mode 2 hybrid
+       DATA >0001, >0400  ; Bank 1: Ms Texas                           Mode 2/3 flicker
        DATA >000C, >0500  ; Bank 12: Twister and scroller              Mode 2 hybrid
        DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
        DATA >0017, >0500  ; Bank 23: Multisplit                        Mode 1/2/3
