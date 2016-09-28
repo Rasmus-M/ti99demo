@@ -139,15 +139,15 @@ TOPFRM LI   R10,STACK
        MOV  @TICK,R6
        CI   R6,300
        JLT  LABEL3
-       CI   R6,315
+       CI   R6,316
        JGT  LABEL3
        AI   R6,-300
        BL   @BITMA0
 LABEL3 CI   R6,400
        JLT  LABEL2
-       CI   R6,415
+       CI   R6,416
        JGT  LABEL2
-       AI   R6,-415
+       AI   R6,-416
        NEG  R6
        BL   @BITMA0
 *      Update variables
@@ -359,11 +359,11 @@ BITMA0 MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R0,NAMETB+16
        LI   R12,VDPWD
        CLR  R1
-       LI   R2,24
+       LI   R2,24                      ; Rows
 BITMA1 BL   @VWAD
        MOV  R1,R5
        LI   R4,16
-       S    R6,R4
+       S    R6,R4                      ; 16 - n non-bitmap columns
        JEQ  BITMA4
 BITMA2 MOVB R5,*R12
        AI   R5,>0100
@@ -371,7 +371,7 @@ BITMA2 MOVB R5,*R12
        JNE  BITMA2
 BITMA4 MOV  R1,R5
        AI   R5,>8000
-       MOV  R6,R4
+       MOV  R6,R4                      ; n bitmap columns
        JEQ  BITMA5
 BITMA3 MOVB R5,*R12
        AI   R5,>0100
@@ -693,7 +693,7 @@ VDPW1  MOVB R1,*R0
        MOVB R1,*R0
        MOVB R1,*R0
        MOVB R1,*R0
-       COC  @VDPW7,R3
+       COC  @VDPC7,R3
        JNE  VDPW4
        BL   @PLAYSNG
 VDPW4  DEC  R3
@@ -707,7 +707,6 @@ VDPW2  MOVB R1,*R0
 VDPW3  DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
        B    *R11
-VDPW7  DATA >0007
 *// VDPWR
 
 *********************************************************************
