@@ -78,7 +78,7 @@ INIT
 * Pattern Table     >0000   >17FF
 * Sprite Patterns   >1800   >1FFF
 * Color Table       >2000   >37FF
-* Name Table        >3800   >3AFF
+* Name Table        >3800   >3AFF   and in >3C00
 * Sprite Attributes >3B00   >3BFF
 * Unused            >3C00   >3FFF
 
@@ -195,7 +195,7 @@ NTLP2   MOVB @LBR1, *R0
 
 * Blank nametable
         LI   R2, 256   ; Length of name table
-        LI   R0, >5A00 ; Address of 3rd part of name table (>1A00 | >4000)
+        LI   R0, >7E00 ; Address of 3rd part of name table (>3E00 | >4000)
         MOVB @LBR0, @VDPWA
         MOVB R0, @VDPWA
         LI   R0, VDPWD
@@ -208,7 +208,7 @@ NTLP3   MOVB R1, *R0
         LWPI FXWP
 
         LI   R2, 192
-        LI   R0, >5A40 ; Address of 3rd part of name table (>1A20 | >4000)
+        LI   R0, >7E40 ; Address of 3rd part of name table (>1A20 | >4000)
         MOVB @LBR0, @VDPWA
         MOVB R0, @VDPWA
         LI   R0, VDPWD
@@ -220,6 +220,28 @@ NTLP4   MOVB @LBR1, *R0
         
         BL  @PLAYSNG                   ; Added by Asmusr
         LWPI FXWP
+
+* Gun added by Asmusr
+* Sprite Patterns at >1800
+        LI   R0, >5800                 ; >1800 | 4000
+        LI   R1, SPR0
+        LI   R2, 12*32
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, VDPWD
+SPRPAT  MOVB *R1+, *R0
+        DEC  R2
+        JNE  SPRPAT
+* Sprite attributes at >3B00
+        LI   R0, >7B00                 ; >3B00 | 4000
+        LI   R1, SAL
+        LI   R2, 1+12*4
+        MOVB @LBR0, @VDPWA
+        MOVB R0, @VDPWA
+        LI   R0, VDPWD
+SPRATT  MOVB *R1+, *R0
+        DEC  R2
+        JNE  SPRATT
 
         LWPI CTRLWP
         MOV  @SAVR11, R11
@@ -332,8 +354,8 @@ NEXT
 
 * Calculate address of nametable double buffer
         MOV  @NSPACE, R0
-        LI   R1, >2000
-        XOR  R1, R0          ; Toggle between >3800 and >1800
+        LI   R1, >0400
+        XOR  R1, R0          ; Toggle between >3800 and >3C00
         MOV  R0, @NSPACE
         MOV  R0, R14
         AI   R14, >0200
@@ -506,6 +528,8 @@ VWTR    ORI  R0,>8000
         RT
 
         EVEN
+
+        COPY "gun.a99"
 
 STATUSP
         BCOPY "../../data/STATUSBAR3.TIAP"

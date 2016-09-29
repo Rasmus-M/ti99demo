@@ -118,7 +118,7 @@ PTLP3  MOVB *R1+, *R0
        JNE  PTLP
 
 * Copy color table       
-       LI   R0, >2000
+       LI   R0, >6000
        MOVB @R0LB, @VDPWA
        MOVB R0, @VDPWA
        LI   R0,VDPWD
@@ -142,6 +142,13 @@ CTLP2  MOVB R5,*R0
 *      Next group of 32
        DEC  R4
        JNE  CTLP
+
+*      Disable sprites
+       LI   R0, >7B00
+       MOVB @R0LB, @VDPWA
+       MOVB R0, @VDPWA
+       LI   R1,>D000
+       MOV  R1,@VDPWD
 
 * Enable the screen
        LI   R0,>01E2
