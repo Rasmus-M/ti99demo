@@ -65,7 +65,7 @@ INIT
         BL   @VWTR
         LI   R0,>0403
         BL   @VWTR
-        LI   R0,>0576
+        LI   R0,>0538
         BL   @VWTR
         LI   R0,>0603
         BL   @VWTR
@@ -77,10 +77,17 @@ INIT
 * Name              Start   End
 * Pattern Table     >0000   >17FF
 * Sprite Patterns   >1800   >1FFF
+* Sprite Attributes >1C00   >1C7F table 0
+*                   >1C80   >1CFF table 1
+*                   >1D00   >1D7F table 2
+*                   >1D80   >1DFF table 3
+*                   >1E00   >1E7F table 4
+*                   >1E80   >1EFF table 5
+*                   >1F00   >1F7F table 6
+*                   >1F80   >1FFF table 7
 * Color Table       >2000   >37FF
-* Name Table        >3800   >3AFF   and in >3C00
-* Sprite Attributes >3B00   >3BFF
-* Unused            >3C00   >3FFF
+* Name Table        >3800   >3AFF (and in >3C00)
+*                   >3C00   >3FFF
 
 * Write pattern table (>0F, >0F, >0F, >0F, ...)
         LI   R0, >4000      ; >0000 | >4000
@@ -232,16 +239,38 @@ NTLP4   MOVB @LBR1, *R0
 SPRPAT  MOVB *R1+, *R0
         DEC  R2
         JNE  SPRPAT
-* Sprite attributes at >3B00
-        LI   R0, >7B00                 ; >3B00 | 4000
-        LI   R1, SAL
-        LI   R2, 1+12*4
+* Sprite attributes at >3C00 x 8 tables
+        CLR  R3                        ; Table counter
+SPRAT1  MOV  R3, R0                    ; Table no
+        SLA  R0, 7                     ; * 128
+        AI   R0, >5C00                 ; + >1C00 | 4000
         MOVB @LBR0, @VDPWA
         MOVB R0, @VDPWA
         LI   R0, VDPWD
-SPRATT  MOVB *R1+, *R0
+        LI   R1, SAL                   ; Sprite attribute list
+        LI   R2, 12                    ; 12 sprites
+        MOV  R3, R4
+        SWPB R4                        ; Y offset
+SPRATT  MOVB *R1+,R5
+        AB   R4,R5                     ; Modify y value
+        MOVB R5,*R0
+        MOVB *R1+,*R0                  ; X
+        MOVB *R1+,*R0                  ; Pattern
+        MOVB *R1+,*R0                  ; Color
         DEC  R2
         JNE  SPRATT
+        MOVB *R1+,*R0                  ; End marker
+        INC R3
+        CI  R3,8
+        JNE SPRAT1
+
+* Copy scan loop, decoder, and VDP copy loop to scratchpad
+        LI   R0, SCAN
+        LI   R1, SPSCAN
+        LI   R2, VEND-SCAN
+CPLP    MOV  *R0+, *R1+
+        DECT R2
+        JNE  CPLP
 
         LWPI CTRLWP
         MOV  @SAVR11, R11
@@ -323,14 +352,15 @@ FRAME
 
         LIMI 0
         
-* Copy scan loop, decoder, and VDP copy loop to scratchpad
-        LI   R0, SCAN
-        LI   R1, SPSCAN
-        LI   R2, VEND-SCAN
-CPLP    MOV  *R0+, *R1+
-        DECT R2
-        JNE  CPLP
-                
+* Select sprite attribute table
+        MOV @TICK,R1
+        SRL R1,1
+        ANDI R1,>000F
+        LI  R0,>0500
+        MOVB @GUNTBLS(R1),@LBR0
+        BL  @VWTR
+        INC @TICK
+
 * Decode compressed frame
         MOV  @WPTR, R0
         LI   R15, HEIGHT
@@ -440,6 +470,7 @@ CLAMP
         
 SAVR11  DATA >0000
 NSPACE  DATA >7800
+TICK    DATA >0000
         
 * Move me to scratch pad \/ \/ \/ ****************************
 * This code computes a nametable row for the first third of the screen and the
@@ -530,6 +561,8 @@ VWTR    ORI  R0,>8000
         EVEN
 
         COPY "gun.a99"
+GUNTBLS BYTE >38,>39,>3A,>3B,>3C,>3D,>3E,>3F
+        BYTE >3F,>3E,>3D,>3C,>3B,>3A,>39,>38
 
 STATUSP
         BCOPY "../../data/STATUSBAR3.TIAP"
