@@ -118,9 +118,23 @@ LOOP1  MOV  @TICK,R0
        MOV  @TICK,R1
        CI   R1,800
        JHE  TOPFR1
+       CI   R1,250
+       JNE  TOPFR5
+*      Change colors
+       LI   R0,COLRTB
+       LI   R1,>6F00
+       LI   R2,16
+       BL   @VDPWR
+       JMP  TOPFR4
+TOPFR5 CI   R1,500
+       JNE  TOPFR4
+       LI   R0,COLRTB
+       LI   R1,>DF00
+       LI   R2,16
+       BL   @VDPWR
 *      Update parameters
 *      XSIZE and YSIZE are sine curves with slightly different phases
-       MOV  @TICK,R1
+TOPFR4 MOV  @TICK,R1
        BL   @SIN
        SRA  R1,2
        AI   R1,12+64
