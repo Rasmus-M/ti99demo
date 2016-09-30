@@ -260,6 +260,9 @@ SPRATT  MOVB *R1+,R5
         DEC  R2
         JNE  SPRATT
         MOVB *R1+,*R0                  ; End marker
+        LWPI CTRLWP
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP
         INC R3
         CI  R3,8
         JNE SPRAT1
