@@ -237,6 +237,9 @@ NTLP4   MOVB @LBR1, *R0
         MOVB R0, @VDPWA
         LI   R0, VDPWD
 SPRPAT  MOVB *R1+, *R0
+        LWPI CTRLWP
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP
         DEC  R2
         JNE  SPRPAT
 * Sprite attributes at >3C00 x 8 tables
