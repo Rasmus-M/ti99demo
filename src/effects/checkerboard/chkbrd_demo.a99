@@ -502,7 +502,7 @@ GMODE1 MOVB *R1+,@R0LB
        BL   @VDPCP
        LI   R0,PTRNTB+>400
        LI   R1,PAT128
-       LI   R2,104*8
+       LI   R2,105*8
        BL   @VDPCP
 *      Colors
        LI   R0,COLRTB
@@ -711,6 +711,6 @@ VWTR   MOVB @R0LB,@VDPWA               ; Send low byte (value) to write to VDP r
 * Include files
 *
        COPY "charset2.a99"
-       COPY "logo.a99"
+       COPY "chess.a99"
 
 NTBUF  EQU  $
