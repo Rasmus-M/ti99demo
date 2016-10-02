@@ -1460,7 +1460,6 @@ NOSEC
 *********************************************************************
        EVEN
 SCNLST
-       DATA >0009, >0400  ; Bank 9: Metaballs                          Mode 1
        DATA >001F, >0500  ; Bank 31: Stretch                           Mode 2 hybrid
        DATA >001C, >0500  ; Bank 28: Title - Don't mess with Texas     Mode 2
        DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
