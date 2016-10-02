@@ -75,13 +75,33 @@ INIT    MOV  R11, @SAVR11
         LI   R2, PEND - PATTERNS
         BL   @VMBW
 
+* Repeat last pattern for remaining table
+        LI   R2,16
+        LI   R0,VDPWD
+PTLP    LI   R1,PEND
+        MOVB *R1+,*R0
+        MOVB *R1+,*R0
+        MOVB *R1+,*R0
+        MOVB *R1+,*R0
+        MOVB *R1+,*R0
+        MOVB *R1+,*R0
+        MOVB *R1+,*R0
+        MOVB *R1+,*R0
+        LWPI CTRLWP                    ; added by Tursi
+        BL  @PLAYSNG                   ; Added by Asmusr
+        LWPI FXWP                      ; added by Tursi
+        DEC R2
+        JNE PTLP
+
 * Write color table
         LI   R0, >7100
-        LI   R1, >BD00
-        LI   R2, 32
         MOVB @LBR0,@VDPWA
         MOVB R0, @VDPWA
         LI   R0, VDPWD
+        LI   R1,>BD00
+        MOVB R1,*R0
+        LI   R1, >AB00
+        LI   R2, 31
 CTLP    MOVB R1, *R0
         DEC  R2
         JNE  CTLP
@@ -107,6 +127,7 @@ DX2L2
         SRL  R4, 8
 
         MPY  R4, R4
+        SRL  R5,6
 
 * Compute index in SQTAB and write product
         MOV  R1, R4
@@ -135,6 +156,12 @@ SPLP    MOV  *R0+, *R1+
         DECT R2
         JNE  SPLP
 
+* Init positions
+        MOV  @POS+0, R12
+        MOV  @POS+2, R13
+        MOV  @POS+4, R14
+        MOV  @POS+6, R15
+
         LWPI CTRLWP
         MOV @SAVR11, R11
         RT
@@ -151,9 +178,10 @@ FRAME
         LI   R0, >5000 ; >1000 | >4000
         MOVB @LBR0, @VDPWA
         MOVB R0, @VDPWA
-        MOV  @POS+0, R12
-        MOV  @POS+2, R13
-        MOV  @POS+4, R14
+
+;        MOV  @POS+0, R12
+;        MOV  @POS+2, R13
+;        MOV  @POS+4, R14
         MOV  @POS+6, R15
 
         BL   @NTSP
@@ -164,16 +192,17 @@ FRAME
         INC   R14
         INCT  R15
 
-* Save positions
         ANDI R12, >00FF
-        MOV  R12, @POS
         ANDI R13, >00FF
-        MOV  R13, @POS+2
         ANDI R14, >00FF
-        MOV  R14, @POS+4
         ANDI R15, >00FF
+
+* Save positions
+;        MOV  R12, @POS
+;        MOV  R13, @POS+2
+;        MOV  R14, @POS+4
         MOV  R15, @POS+6
-        
+
 * Bail after 1200 ticks (20 seconds)
         LWPI CTRLWP
         CI   R3, 1200
@@ -233,37 +262,38 @@ NT
         SLA  R5, 1
         SLA  R7, 1
         LI   R3, VDPWD
+        LI   R15,>0200
 FLPY    LI   R2, 32
         MOV  R12, R4
         MOV  R14, R6
         SLA  R4, 1
         SLA  R6, 1
-FLPX    
+
+        MOV  @SQTAB(R5), R9     ; Take dy (R5) and lookup dy^2 (R9)
+        MOV  @SQTAB(R7), R1     ; Asmusr: moved out of inner loop
+FLPX
 * Metaball 1
         MOV  @SQTAB(R4), R8     ; Take dx (R4) and lookup dx^2 (R8)
-        MOV  @SQTAB(R5), R9     ; Take dy (R5) and lookup dy^2 (R9)
-        A    R8, R9             ; R9 = r^2 = dx^2 + dy^2
-        SRL  R9, 6              ; R9 = r^2 / 64 i.e. in [0, 1023]
-        MOVB @FALOFF(R9), R9    ; R9 = f(r^2)
+        A    R9, R8             ; R8 = r^2 = dx^2 + dy^2
+*        SRL  R8, 6             ; R8 = r^2 / 64 i.e. in [0, 1023] (Asmusr: scaled SQTAB instead)
+        MOVB @FALOFF(R8), R8    ; R8 = f(r^2)
 
 * Metaball 2
         MOV  @SQTAB(R6), R10
-        MOV  @SQTAB(R7), R1
-        A    R10, R1
-        SRL  R1, 6
-        MOVB @FALOFF(R1), R1
-
+        A    R1, R10
+*        SRL  R10, 6
 * Sum the metaballs
-        AB   R9, R1
-        CI   R1, >0800
-        JLT  DRAW
-        LI   R1, >0700
+        AB   @FALOFF(R10), R8
+;        AB   R8, R10
+;        CI   R10, >0800        ; No need for check if more characters are defined
+;        JLT  DRAW
+;        LI   R10, >0700
         
 * Write to VDP
-DRAW    MOVB R1, *R3
+DRAW    MOVB R8, *R3
 
-        AI   R4, >0200
-        AI   R6, >0200
+        A    R15,R4
+        A    R15,R6
         DEC  R2
         JNE  FLPX
         
@@ -271,8 +301,8 @@ DRAW    MOVB R1, *R3
         BL   @PLAYSNG
         LWPI FXWP
         
-        AI   R5, >0200
-        AI   R7, >0200        
+        A    R15,R5
+        A    R15,R7
         DEC  R0
         JNE  FLPY
         B    *R11
@@ -370,6 +400,8 @@ PATTERNS
         BYTE >FF, >FF, >FF, >FF, >FF, >FF, >FF, >FF
 
 PEND
+
+        BYTE >08,>54,>2A,>55,>AA,>54,>2A,>10
 
 FALOFF
         COPY "falloff.a99"
