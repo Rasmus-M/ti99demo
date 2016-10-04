@@ -40,75 +40,110 @@ SQTAB  EQU  >A800
 INIT    MOV  R11, @SAVR11
         LWPI FXWP
 
-* Initialize standard mode (Graphics I)
-        LI   R0,>0000
+* Initialize standard mode (Graphics II hybrid)
+        LI   R0,>0002
         BL   @VWTR
-        LI   R0,>01A1 ; Screen disabled. Later we write 01E1 to enable.
+        LI   R0,>01A2 ; Screen disabled. Later we write 01E2 to enable.
         BL   @VWTR
-        LI   R0,>0204 ; Name table starts at >1000
+        LI   R0,>020A ; Name table starts at >2800
         BL   @VWTR
-        LI   R0,>03C4 ; Color table starts at >3100
+        LI   R0,>039F ; Color table starts at >2000, >800 bytes long
         BL   @VWTR
-        LI   R0,>0400 ; Pattern table starts at >0000
+        LI   R0,>0403 ; Pattern table starts at >0000, >1800 bytes long
         BL   @VWTR
-        LI   R0,>0560 ; Sprite attribute table >3000
+        LI   R0,>0556 ; Sprite attribute table >2B00
         BL   @VWTR
-        LI   R0,>0607 ; Sprite pattern table at >3800
+        LI   R0,>0603 ; Sprite pattern table at >1800
         BL   @VWTR
-        LI   R0,>0701 ; Backdrop color is black
+        LI   R0,>070D ; Backdrop color is black
         BL   @VWTR
         
 * At this point VRAM is organized in the following fashion:
 *
 * Name              Start   End
 * Pattern Table     >0000   >07FF
-* Name Table        >1000   >12FF (We'll be cycling through these)
-* Sprite Attributes >3000   >30FF?
-* Color Table       >3100   >3120
-* Sprite Patterns   >3800   >3FFF (room for 256 8x8 sprites)
+* Name Table        >2800   >1CFF (We'll be cycling through these)
+* Sprite Attributes >2B00   >2B7F
+* Color Table       >2000   >27FF
+* Sprite Patterns   >1800   >1FFF (room for 256 8x8 sprites)
 
         CLR  R15
 
-* Copy over pattern table
-        CLR  R0
-        LI   R1, PATTERNS
-        LI   R2, PEND - PATTERNS
-        BL   @VMBW
+* Sprites patterns
+       LI   R0, >1800 | >4000
+       MOVB @LBR0,@VDPWA
+       MOVB R0, @VDPWA
+       LI   R0,VDPWD
+       LI   R1,SPR0
+       LI   R2,11*32
+SPLP1  MOVB *R1+,*R0
+       DEC  R2
+       JNE  SPLP1
+       LWPI CTRLWP                     ; Added by Tursi
+       BL   @PLAYSNG                   ; Added by Asmusr
+       LWPI FXWP                       ; Added by Tursi
+*      Sprite attributes
+       LI   R0, >2B00 | >4000
+       MOVB @LBR0,@VDPWA
+       MOVB R0, @VDPWA
+       LI   R0,VDPWD
+       LI   R1,SAL
+       LI   R2,11*4
+SPLP2  MOVB *R1+,*R0
+       DEC  R2
+       JNE  SPLP2
+       LI   R1,>D000
+       MOVB R1,*R0
 
-* Repeat last pattern for remaining table
-        LI   R2,16
-        LI   R0,VDPWD
-PTLP    LI   R1,PEND
-        MOVB *R1+,*R0
-        MOVB *R1+,*R0
-        MOVB *R1+,*R0
-        MOVB *R1+,*R0
-        MOVB *R1+,*R0
-        MOVB *R1+,*R0
-        MOVB *R1+,*R0
-        MOVB *R1+,*R0
-        LWPI CTRLWP                    ; added by Tursi
-        BL  @PLAYSNG                   ; Added by Asmusr
-        LWPI FXWP                      ; added by Tursi
-        DEC R2
-        JNE PTLP
+* Patterns
+       LI   R0,>0000 | >4000
+       MOVB @LBR0,@VDPWA
+       MOVB R0,@VDPWA
+       LI   R0,VDPWD
+       LI   R5,3
+PTLP0  LI   R4,16
+PTLP1  LI   R2,64
+       LI   R1,PATTERNS
+PTLP2  MOVB *R1+,*R0
+       DEC  R2
+       JNE  PTLP2
+       LI   R3,8
+PTLP3  LI   R1,PEND-8
+       LI   R2,8
+PTLP4  MOVB *R1+,*R0
+       DEC  R2
+       JNE  PTLP4
+       DEC  R3
+       JNE  PTLP3
+       LWPI CTRLWP                     ; Added by Tursi
+       BL   @PLAYSNG                   ; Added by Asmusr
+       LWPI FXWP                       ; Added by Tursi
+       DEC  R4
+       JNE  PTLP1
+       DEC  R5
+       JNE  PTLP0
 
 * Write color table
-        LI   R0, >7100
-        MOVB @LBR0,@VDPWA
-        MOVB R0, @VDPWA
-        LI   R0, VDPWD
-        LI   R1,>BD00
-        MOVB R1,*R0
-        LI   R1, >AB00
-        LI   R2, 31
-CTLP    MOVB R1, *R0
-        DEC  R2
-        JNE  CTLP
-        
-        LWPI CTRLWP                    ; added by Tursi
-        BL  @PLAYSNG                   ; Added by Asmusr
-        LWPI FXWP                      ; added by Tursi
+       LI   R0,>2000 | >4000
+       MOVB @LBR0,@VDPWA
+       MOVB R0,@VDPWA
+       LI   R0,VDPWD
+       LI   R1,COL0
+       LI   R4,16
+CLLP1  LI   R3,16
+CLLP2  LI   R2,8
+CLLP3  MOVB *R1+,*R0
+       DEC  R2
+       JNE  CLLP3
+       AI   R1,-8
+       DEC  R3
+       JNE  CLLP2
+       LWPI CTRLWP                    ; Added by Tursi
+       BL   @PLAYSNG                  ; Added by Asmusr
+       LWPI FXWP                      ; Added by Tursi
+       AI   R1,8
+       DEC  R4
+       JNE  CLLP1
 
 * Compute dx^2 table
         LI   R0, 32
@@ -171,20 +206,20 @@ FRAME
         LWPI FXWP
         
 * Enable screen
-        LI   R0, >01E1
+        LI   R0, >01E2
         BL   @VWTR
 
 * Write nametable
-        LI   R0, >5000 ; >1000 | >4000
+        LI   R0, >2800 | >4000
         MOVB @LBR0, @VDPWA
         MOVB R0, @VDPWA
 
+        BL   @NTSP
+
 ;        MOV  @POS+0, R12
-;        MOV  @POS+2, R13
+        MOV  @POS+2, R13
 ;        MOV  @POS+4, R14
         MOV  @POS+6, R15
-
-        BL   @NTSP
 
 * Increment positions
         DECT  R12
@@ -199,7 +234,7 @@ FRAME
 
 * Save positions
 ;        MOV  R12, @POS
-;        MOV  R13, @POS+2
+        MOV  R13, @POS+2
 ;        MOV  R14, @POS+4
         MOV  R15, @POS+6
 
@@ -262,6 +297,7 @@ NT
         SLA  R5, 1
         SLA  R7, 1
         LI   R3, VDPWD
+        CLR  R13                 ; Bias
         LI   R15,>0200
 FLPY    LI   R2, 32
         MOV  R12, R4
@@ -290,7 +326,8 @@ FLPX
 ;        LI   R10, >0700
         
 * Write to VDP
-DRAW    MOVB R8, *R3
+DRAW    AB   R13,R8
+        MOVB R8, *R3
 
         A    R15,R4
         A    R15,R6
@@ -303,6 +340,7 @@ DRAW    MOVB R8, *R3
         
         A    R15,R5
         A    R15,R7
+        AI   R13,>1000
         DEC  R0
         JNE  FLPY
         B    *R11
@@ -398,10 +436,81 @@ PATTERNS
 * x x x x x x x x
 
         BYTE >FF, >FF, >FF, >FF, >FF, >FF, >FF, >FF
-
 PEND
 
-        BYTE >08,>54,>2A,>55,>AA,>54,>2A,>10
+COL0   DATA >DDDD,>5D5D,>3D5D,>DDDD
+COL1   DATA >DD3D,>BDBD,>FDBD,>FDDD
+COL2   DATA >FDFD,>BDFD,>BDBD,>3DBD
+COL3   DATA >3D3D,>5D3D,>5D5D,>4D1D
+COL4   DATA >4D1D,>4D1D,>1D4D,>1D1D
+COL5   DATA >1D1D,>1D1D,>1D1D,>1D1D
+COL6   DATA >1D1D,>4D1D,>1D4D,>1D4D
+COL7   DATA >1D4D,>5D5D,>3D5D,>3D3D
+COL8   DATA >BD3D,>BDBD,>FDBD,>FDFD
+COL9   DATA >FDFD,>BDFD,>BDBD,>3DBD
+COL10  DATA >3D3D,>5D3D,>5D5D,>4D1D
+COL11  DATA >4D1D,>4D1D,>1D4D,>1D1D
+COL12  DATA >1D1D,>1D1D,>1D1D,>1D1D
+COL13  DATA >DD1D,>4D1D,>1D4D,>1DDD
+COL14  DATA >DDDD,>5D5D,>3D5D,>DDDD
+COL15  DATA >DDDD,>BDBD,>FDBD,>DDDD
+
+SPR0   DATA >0000,>0000,>0000,>0000
+       DATA >0101,>0103,>0303,>031F
+       DATA >0000,>0000,>001F,>3FFF
+       DATA >EFC3,>C3C1,>E1E0,>E0F0
+SPR1   DATA >003C,>7C7C,>7878,>F8F8
+       DATA >F8F8,>F8F8,>F8F8,>F8F0
+       DATA >0000,>0000,>0000,>0000
+       DATA >0000,>0000,>0000,>1FFF
+SPR2   DATA >0000,>0000,>0000,>0000
+       DATA >0000,>0000,>0000,>80E0
+       DATA >0000,>0000,>0000,>0000
+       DATA >0000,>0000,>0000,>0000
+SPR3   DATA >0000,>0000,>0000,>0000
+       DATA >0000,>0000,>1838,>7979
+       DATA >0001,>030F,>1F3D,>71E1
+       DATA >C101,>0000,>20E0,>E0E0
+SPR4   DATA >7FFF,>E1E0,>E0E1,>E1E1
+       DATA >F1F3,>F3F3,>F3F7,>F7FF
+       DATA >F0F8,>F8FC,>FEFF,>FFFF
+       DATA >DFCF,>CF87,>9733,>63E1
+SPR5   DATA >E34F,>3F7E,>EF8F,>0F0F
+       DATA >8F8F,>8FCF,>CFFF,>EFEF
+       DATA >FFC3,>0101,>0103,>0307
+       DATA >0E1C,>78F0,>E0F8,>FCFE
+SPR6   DATA >E0E0,>E0E0,>C0C0,>800E
+       DATA >1F3F,>7EFC,>F979,>0303
+       DATA >0000,>0000,>000C,>1F3F
+       DATA >3E7E,>FCF8,>F8F0,>E0E0
+SPR7   DATA >7C7C,>7C3C,>3E3E,>3C18
+       DATA >0000,>0000,>0000,>0000
+       DATA >E0F0,>F0F0,>C0C0,>0000
+       DATA >0103,>0302,>0000,>0000
+SPR8   DATA >FEFF,>FDF9,>FBF3,>E3E3
+       DATA >C383,>0101,>0000,>0000
+       DATA >E1C1,>C0C0,>C0C0,>C0E0
+       DATA >E0F0,>FEFF,>FF7F,>3F00
+SPR9   DATA >FFFF,>FFFF,>FF7F,>7E7C
+       DATA >7878,>70E0,>E0C0,>0000
+       DATA >FF3F,>1F0F,>0703,>0100
+       DATA >0000,>0000,>0000,>0000
+SPR10  DATA >0380,>C0E0,>E0E0,>C080
+       DATA >0000,>0000,>0000,>0000
+       DATA >C0C0,>0000,>0000,>0000
+       DATA >0000,>0000,>0000,>0000
+
+SAL    BYTE 143,208,0,1
+       BYTE 159,224,20,1
+       BYTE 175,240,40,1
+       BYTE 159,240,24,1
+       BYTE 175,224,36,1
+       BYTE 143,240,8,1
+       BYTE 159,192,12,1
+       BYTE 175,208,32,1
+       BYTE 143,224,4,1
+       BYTE 159,208,16,1
+       BYTE 175,192,28,1
 
 FALOFF
         COPY "falloff.a99"
