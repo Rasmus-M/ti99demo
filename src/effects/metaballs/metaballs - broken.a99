@@ -255,7 +255,7 @@ RETURN
   
 SAVR11  DATA >0000
 COLOFF	DATA >0000
-COLSTP	DATA >F000
+COLSTP	DATA >0100
 POS     DATA 3, 3, 30, 27
 
 *********************************************************************
