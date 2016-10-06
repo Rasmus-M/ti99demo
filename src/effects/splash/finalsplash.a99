@@ -1,0 +1,922 @@
+********************************************************************************
+*
+* DSR Final Splash Screen (Tursi)
+*
+********************************************************************************
+
+       COPY "../../common/HEADER.INC"
+       COPY "../../common/ROUTINES.INC"
+
+********************************************************************************
+*
+* Main program
+*
+       XORG FXMEM
+
+       DATA INIT                       ; Address of initialization routine
+       DATA FRAME                      ; Address of frame routine
+
+*********************************************************************************
+*
+* Intitialize (should all fit in one bank...)
+*
+INIT   MOV  R11,@INIRET
+* 		 init code
+
+* set display (display off) and disable sprites
+	LI R1,G1REGS
+	BL @LOADRG
+
+* load the color table
+	li r0,>380
+	li r1,CLRSET
+	li r2,32
+	bl @vmbw
+	
+* load the character set
+	li r0,>0800
+	li r1,PAT0
+	li r2,176*8
+	bl @vmbw
+
+* clear the screen with 0 bytes
+	clr r0
+	clr r1
+	li r2,>0300
+	bl @vmbset
+	
+* turn on the screen
+	li r0,>81E0
+	bl @vwad
+	
+* set initial state
+	clr @state
+	clr @stdata
+
+*      Return
+       MOV  @INIRET,R11
+       B    *R11
+INIRET DATA 0
+*// INIT
+
+*********************************************************************************
+*
+* Frame
+*
+FRAME  MOV  R11,@FRMRET
+       MOV  R3,@TICK
+
+*      Call work code by state
+			 mov @state,r9
+			 sla r9,1
+			 ai r9,sttable
+			 mov *r9,r9
+			 bl *r9
+
+*      Measure time to finish
+       CLR  R0                         ; Signal not done
+       MOV  @TICK,R3
+       CI   R3,600
+       JL   RETURN
+       SETO R0                         ; Signal done
+       
+*      Return
+RETURN MOV  @FRMRET,R11
+       B    *R11
+FRMRET DATA 0
+TICK   DATA 0
+*// FRAME
+
+* table of drawing states
+sttable
+			 data dstate1,dstate2,dstate3,dstate4
+			 
+*********************************************************************************
+* state1 - draw the black as a set of diagonal up and down slashes
+* actual black area is 6,6 - 27,14. To provide the illusion of a brief delay
+* when changing direction, I'll extend by 2 beyond that. 
+* with the current position - wraparound is okay, it won't interfere
+* ugh, coordinates in magellen were set to 1-based, don't count on the comments ;)
+dstate1
+	mov r11,@stateret
+
+	mov @stdata,r0		; check if already initialized
+	jne s1init				
+	li r0,446					; start before the first cell, so there's a delay. 14*32+(6-8)
+	li r1,-31
+	mov r1,@stdata2		; initial direction
+s1init
+
+	li r8,3						; number of cells per frame to draw
+	li r4,>0f00				; character with a nice angled edge
+
+chr1lp
+	mov r0,r1
+	ai r1,BARMAP
+	movb *r1,r2
+	
+	mov r0,r1
+	ai r1,>4000
+	swpb r1
+	movb r1,@>8c02
+	swpb r1
+	movb r1,@>8c02		; set VDP address
+	
+	a @stdata2,r0			; diagonally up and right, this is here to delay for the VDP,
+										; and we need to do it anyway
+	
+	movb r2,@>8c00		; write VDP byte
+	
+* check whether to draw an angle
+* skip if column > 19
+  mov r0,r1
+  andi r1,>001f			; column
+  ci r1,>0018
+  jh nochars1
+
+* see if the first few bytes of the chardef all end in >01  
+	srl r2,8					; make byte (char index)
+	sla r2,3					; multiply by 8 (don't combine these unless you clear R2 before the movb above)
+	ai r2,pat0+1			; pattern table in CPU memory plus 1
+	movb *r2,r3				; 2nd byte
+	inct r2
+	inct r2
+	socb *r2+,r3			; 6rd byte
+	andi r3,>0100			; least significant bit
+	jeq nochars1
+	movb r4,@>8c00		; write angle char to hide blockiness briefly
+nochars1
+	
+* check for "done done" - the row will be wrong due to wraparound
+* ending position is row 4, column 36 (wrapped), so adr 164
+	ci r0,164					; are we done done?
+	jne notdones1
+	
+	inc @state				; we are done done. go to state 2
+	clr @stdata				; new data used there
+	jmp frets1
+
+notdones1	
+	mov r0,r1					; check for top of stroke (line 4)
+	srl r1,5					; divide by 32
+
+	mov @stdata2,r2		; check if going up or down (important because of col.wrap)
+	jgt chkdown
+	
+	ci r1,4
+	jeq doneup
+	jmp chkdone
+
+chkdown	
+	ci r1,16					; check downstroke
+	jeq donedown
+	
+chkdone	
+	dec r8						; check for done loop
+	jne chr1lp				; not yet
+	jmp savrets1	
+	
+donedown
+* reverse direction
+	li r1,-31					; up again
+	mov r1,@stdata2
+	inc r0
+	jmp savrets1
+
+doneup
+* reverse direction
+	li r1,31					; down diagonal
+	mov r1,@stdata2
+	inc r0						; start one character over
+	
+savrets1
+	mov r0,@stdata		; save our position
+
+frets1
+	mov @stateret,r11
+	b *r11						; back to caller
+	
+*********************************************************************************
+* state 2 - draw the 'DSR' logo bit by bit
+* the chars to draw were determined by hand examining the screen in Magellan
+* some of the overlaps were chosen to minimize the obvious blockiness ;)
+* all the coords were off by one, but we'll fix here ;)
+dstate2
+	mov r11,@stateret
+
+	mov @stdata,r0		; check if already initialized
+	jne s2init				
+	li r0,drawtab			; list of cells to draw
+s2init
+
+	mov *r0+,r1				; get char position to draw
+	jeq s2done				; done this frame
+	ai r1,>feff				; subtract 1 from each byte
+	
+* for ease of typing, char positions are x,y, so convert to an address
+	clr r2
+	movb r1,r2
+	swpb r2						; x
+	swpb r1
+	srl r1,8					; y
+	sla r1,5					; y*32
+	a r2,r1						; address
+	
+	mov r1,r2
+	ai r2,FULMAP			; lookup table
+	
+	ai r1,>4000
+	swpb r1
+	movb r1,@>8c02
+	swpb r1
+	movb r1,@>8c02		; set VDP address
+	
+	movb *r2,r2				; get the byte (and give VDP delay time)
+	movb r2,@>8c00		; write it to VDP
+	jmp s2init				; loop as long as there's data
+	
+s2done
+	mov r0,@stdata		; save our position
+
+	ci r0,drawdone		; is it over?
+	jne s2notdone
+	
+	inc @state				; on to state 3
+	clr @stdata
+	
+s2notdone
+	mov @stateret,r11
+	b *r11						; back to caller
+
+*********************************************************************************
+* state 3 - draw the 'we make demos' line one char at a time
+* it's at x,y - 10,16 through 21,16
+dstate3
+	mov r11,@stateret
+
+	mov @stdata,r0		; check if already initialized
+	jne s3init				
+	li r0,16*32+10		; start position
+s3init
+
+	mov r0,r2
+	ai r2,FULMAP			; get character from map
+	
+	mov r0,r1
+	ai r1,>4000
+	swpb r1
+	movb r1,@>8c02
+	swpb r1
+	movb r1,@>8c02		; set VDP address
+	
+	movb *r2,r2				; get the byte (and give VDP delay time)
+	movb r2,@>8c00		; write it to VDP
+
+	li r1,>6100				; cursor char
+	movb r1,@>8c00
+
+	inc r0
+	mov r0,@stdata
+	
+	ci r0,16*32+21
+	jne notdones3
+	
+	inc @state				; on to state 4
+	clr @stdata
+	
+notdones3
+	mov @stateret,r11
+	b *r11
+	
+*********************************************************************************
+* state 4 - we just blink the cursor till we get yanked
+* it's at x,y - 21,16
+dstate4
+	mov r11,@stateret
+
+	li r1,>1542				; VDP address, swapped
+	movb r1,@>8c02
+	swpb r1
+	movb r1,@>8c02
+
+	mov @stdata,r0		; get the timer
+	ci r0,39
+	jh c4on
+	
+	li r1,>6100				; cursor char
+	movb r1,@>8c00
+	jmp c4inc
+	
+c4on
+	clr r1
+	movb r1,@>8c00		; clear the cursor
+	
+c4inc
+	inc r0
+	ci r0,80
+	jne no4clr
+	clr r0
+
+no4clr
+	mov r0,@stdata
+	mov @stateret,r11
+	b *r11
+
+stateret DATA 0
+
+* VDP access
+******************
+* Read R2 bytes from VDP R0 to CPU R1	
+* Destroys R1,R2
+******************
+VMBR
+	MOV R11,@VSAVE
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+VMBRLP
+	MOVB @>8800,*R1+
+	BL @PLAYSNG
+	DEC R2
+	JNE VMBRLP
+	MOV @VSAVE,R11
+	B *R11
+	
+******************
+* Write R2 bytes from CPU R1 to VDP R0
+* Destroys R0,R1,R2
+******************
+VMBW
+	MOV R11,@VSAVE
+	ORI R0,>4000
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+VMBWLP
+	MOVB *R1+,@>8C00
+	BL @PLAYSNG
+	DEC R2
+	JNE VMBWLP
+	MOV @VSAVE,R11
+	B *R11
+
+******************
+* Write R2 copies of MSB R1 to VDP R0
+* Destroys R0,R1,R2
+******************
+VMBSET
+	MOV R11,@VSAVE
+	ORI R0,>4000
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+VMBSLP
+	MOVB R1,@>8C00
+	BL @PLAYSNG
+	DEC R2
+	JNE VMBSLP
+	MOV @VSAVE,R11
+	B *R11
+
+VSAVE DATA 0
+
+******************	
+* Write address or register in r0 (not swapped) (renamed from VDPWA by Asmusr)
+******************
+VWAD
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+	B *R11  
+
+******************	
+* load regs list to VDP address, end on >0000 and write >D0 (for sprites)
+* address of table in R1 (destroyed)
+******************
+LOADRG
+LOADLP
+	MOV *R1+,R0
+	JEQ LDRDN
+	SWPB R0
+	MOVB R0,@>8C02
+	SWPB R0
+	MOVB R0,@>8C02
+	JMP LOADLP
+LDRDN
+	LI R1,>D000
+	MOVB R1,@>8C00
+	B *R11
+
+******************
+* DATA FILES GO HERE	
+******************
+
+* completely standard graphics 1 mode, EA settings
+* SIT&SDT @>0000, PDT @>0800, CT @>0380, SAL @>0300
+G1REGS DATA >81A0,>8000,>8200,>830E,>8401,>8506,>8704,>4380,>0000
+
+****************************************
+* x,y coordinates of chars to draw for DSR
+* >0000 ends a frame (drawdone ends table)
+****************************************
+drawtab
+	data >1103,>1203,0				; S
+	data >1104,>1204,0
+	data >1105,>1205,0
+	data >1106,>1206,0
+	data >1107,>0a09,0				; S+D
+	data >1006,>1005,>1004,>0b08,>0b09,0
+	data >0f05,>0f04,>0e05,>0c07,>0c08,0
+	data >0e06,>0f06,>0d07,>0d08,0
+	data >0e07,>0f07,0
+	data >0e08,>0f08,>1008,0
+	data >0e09,>0f09,>1009,>1109,0
+	data >0e0a,>0f0a,>100a,>110a,0
+	data >0e0b,>100b,>110b,0
+	data >0d0c,>100c,>110c,0
+	data >0c0d,>0d0d,>110d,0
+	data >0c0e,>0d0e,>110e,0
+	data >110f,0
+	data >100e,>100f,>0f0f,>0c09,>0d09,0
+	data >0e0f,>0f0e,>0c0a,>0d0a,0
+	data >0e0e,>0e0d,>0f0d,>0c0b,>0d0b,0
+	data >0c0c,>0d0c,>0e0c,>0f0c,0
+	data >0f0b,0
+	
+	data >1108,0							; R
+	data >1207,0
+	data >1307,0
+	data >1407,0
+	data >1507,>1607,0
+	data >1508,>1608,0
+	data >1408,>1409,>1509,0
+	data >140a,0
+	data >130a,0
+	data >130b,>140b,>130c,0
+	data >140c,>150c,>140d,0
+	data >150d,>160c,>160d,0
+	data >1208,>1308,0
+	data >1209,>1309,0
+	data >120a,0
+	data >120b,0
+	data >120c,0
+	data >120d,0
+	
+	data >080b,>090a,>090b,>0a0a,>0b0a,>1808,>1809,>1909,>190a,0	; quotes
+	data >090c,>090c,>0a0b,>0b0b,>1609,>1709,>180a,0
+	data >080d,>090d,>0a0c,>0b0c,>160a,>170a,>180b,0
+	data >0a0d,>150a,>150b,>160b,>170b,0
+	data >170c,>180c,0
+drawdone
+
+****************************************
+* Map Data (full screens are a bit wasteful, but faster to code)                             
+****************************************
+* Bare image
+* -- Map Row 0 --                       
+BARMAP DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 1 --                       
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 2 --                       
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >6767,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 3 --                       
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>6767    ;
+       DATA >6767,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 4 --                       
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0067,>6767    ;
+       DATA >6767,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 5 --                       
+       DATA >0000,>0000,>0000,>4546    ;
+       DATA >470A,>0A0A,>0A0A,>0A0A    ;
+       DATA >0A0A,>0A0A,>0A68,>696A    ;
+       DATA >6B6C,>6D00,>0000,>0000    ;
+* -- Map Row 6 --                       
+       DATA >0000,>0000,>0000,>0809    ;
+       DATA >0A0A,>0A0A,>0A0A,>0A0B    ;
+       DATA >0A0A,>0A0A,>0A0A,>0C0D    ;
+       DATA >0A0A,>0A00,>0000,>0000    ;
+* -- Map Row 7 --                       
+       DATA >0000,>0000,>006E,>6F0A    ;
+       DATA >0A0A,>0A0A,>0A0A,>0A0A    ;
+       DATA >0A0A,>0A0A,>0A0A,>800A    ;
+       DATA >0A0A,>0A00,>0000,>0000    ;
+* -- Map Row 8 --                       
+       DATA >0000,>0000,>000E,>0A0A    ;
+       DATA >0A0A,>0A0A,>0A0A,>0A0A    ;
+       DATA >0A0A,>0A0A,>0A0A,>0A0A    ;
+       DATA >0A0A,>0A00,>0000,>0000    ;
+* -- Map Row 9 --                       
+       DATA >0000,>0000,>000A,>0A0A    ;
+       DATA >0A0A,>0A0A,>0A0A,>0A0A    ;
+       DATA >0A0A,>0A0A,>0A0A,>0A0A    ;
+       DATA >0A0A,>0A00,>0000,>0000    ;
+* -- Map Row 10 --                      
+       DATA >0000,>0000,>000A,>0A0A    ;
+       DATA >0A0A,>0A0A,>0A0A,>0A0A    ;
+       DATA >0A0A,>0A0A,>0A0A,>0A0A    ;
+       DATA >0A0A,>0A00,>0000,>0000    ;
+* -- Map Row 11 --                      
+       DATA >0000,>0000,>000A,>810A    ;
+       DATA >0A0A,>0A0A,>850A,>0A0A    ;
+       DATA >0A0A,>0A0A,>0A0A,>0A0A    ;
+       DATA >0A0A,>8200,>0000,>0000    ;
+* -- Map Row 12 --                      
+       DATA >0000,>0000,>000F,>400A    ;
+       DATA >0A0A,>41A0,>676F,>0A0A    ;
+       DATA >0A0A,>420A,>0A0A,>0A0A    ;
+       DATA >0A43,>4400,>0000,>0000    ;
+* -- Map Row 13 --                      
+       DATA >0000,>0000,>0083,>8485    ;
+       DATA >8687,>A067,>A10A,>0A0A    ;
+       DATA >0AA2,>0A0A,>A3A4,>0AA5    ;
+       DATA >A6A7,>0000,>0000,>0000    ;
+* -- Map Row 14 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0067,>6767    ;
+       DATA >6700,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 15 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 16 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>6767,>6767,>6767    ;
+       DATA >6767,>6767,>6767,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 17 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 18 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 19 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 20 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 21 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 22 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 23 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       
+* -- Map Row 0 --                       
+FULMAP DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 1 --                       
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 2 --                       
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0102,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 3 --                       
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>6263    ;
+       DATA >6465,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 4 --                       
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0003,>0405    ;
+       DATA >0607,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 5 --                       
+       DATA >0000,>0000,>0000,>4546    ;
+       DATA >470A,>0A0A,>0A53,>5455    ;
+       DATA >0656,>0A0A,>0A68,>696A    ;
+       DATA >6B6C,>6D00,>0000,>0000    ;
+* -- Map Row 6 --                       
+       DATA >0000,>0000,>0000,>0809    ;
+       DATA >0A0A,>0A10,>1112,>130B    ;
+       DATA >1415,>1617,>1819,>0C0D    ;
+       DATA >0A0A,>0A00,>0000,>0000    ;
+* -- Map Row 7 --                       
+       DATA >0000,>0000,>006E,>6F0A    ;
+       DATA >0A0A,>5770,>7172,>0673    ;
+       DATA >7406,>7576,>7778,>8079    ;
+       DATA >0A0A,>0A00,>0000,>0000    ;
+* -- Map Row 8 --                       
+       DATA >0000,>0000,>000E,>0A0A    ;
+       DATA >0A1A,>1B1C,>1D1E,>1F20    ;
+       DATA >2106,>2223,>2425,>2627    ;
+       DATA >280A,>0A00,>0000,>0000    ;
+* -- Map Row 9 --                       
+       DATA >0000,>0000,>000A,>0A0A    ;
+       DATA >7A76,>7B7C,>1D7D,>7E7F    ;
+       DATA >8806,>898A,>8B8C,>8D8C    ;
+       DATA >8E0A,>0A00,>0000,>0000    ;
+* -- Map Row 10 --                      
+       DATA >0000,>0000,>000A,>0A29    ;
+       DATA >2A2B,>2C2D,>2E2F,>3031    ;
+       DATA >3233,>0634,>3536,>3738    ;
+       DATA >0A0A,>0A00,>0000,>0000    ;
+* -- Map Row 11 --                      
+       DATA >0000,>0000,>000A,>818F    ;
+       DATA >9091,>9293,>9495,>9639    ;
+       DATA >0697,>9899,>9A9B,>9C75    ;
+       DATA >0A0A,>8200,>0000,>0000    ;
+* -- Map Row 12 --                      
+       DATA >0000,>0000,>000F,>4039    ;
+       DATA >3A3B,>4148,>493C,>3D0A    ;
+       DATA >3E3F,>4250,>5152,>0A0A    ;
+       DATA >0A43,>4400,>0000,>0000    ;
+* -- Map Row 13 --                      
+       DATA >0000,>0000,>0083,>8485    ;
+       DATA >8687,>A066,>A19D,>9E9F    ;
+       DATA >A8A2,>0A0A,>A3A4,>0AA5    ;
+       DATA >A6A7,>0000,>0000,>0000    ;
+* -- Map Row 14 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>004A,>4B4C    ;
+       DATA >4D00,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 15 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 16 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>4E4F,>5859,>5A5B    ;
+       DATA >5C5D,>5E5F,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 17 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 18 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 19 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 20 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 21 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 22 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+* -- Map Row 23 --                      
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+       DATA >0000,>0000,>0000,>0000    ;
+****************************************
+* Colorset Definitions                  
+****************************************
+CLRSET BYTE >F4,>14,>F1,>1F            ;
+       BYTE >1F,>1F,>1F,>F1            ;
+       BYTE >14,>F4,>F1,>F4            ;
+       BYTE >F4,>14,>1F,>F1            ;
+       BYTE >14,>F1,>1F,>F1            ;
+       BYTE >14,>1F,>10,>10            ;
+       BYTE >10,>10,>10,>10            ;
+       BYTE >10,>10,>10,>10            ;
+****************************************
+* Character Patterns                    
+****************************************
+PAT0   DATA >0000,>0000,>0000,>0000    ;
+PAT1   DATA >0000,>000F,>1F1F,>1F1F    ;
+PAT2   DATA >0000,>00E0,>F0F0,>F0F0    ;
+PAT3   DATA >0001,>0303,>070F,>0F1F    ;
+PAT4   DATA >7FFF,>FFFF,>F0E0,>E0E0    ;
+PAT5   DATA >FFFF,>FFFF,>7F3F,>1F0F    ;
+PAT6   DATA >FFFF,>FFFF,>FFFF,>FFFF    ;
+PAT7   DATA >E0C0,>E0C0,>C0C0,>C0C0    ;
+PAT8   DATA >0007,>1707,>1919,>0307    ;
+PAT9   DATA >1F3F,>7FFF,>FFFF,>FFFF    ;
+PAT10  DATA >FFFF,>FFFF,>FFFF,>FFFF    ;
+PAT11  DATA >FFFF,>FFFE,>FFF9,>F3EF    ;
+PAT12  DATA >FFFF,>FFFF,>FFFF,>FFFD    ;
+PAT13  DATA >F3E7,>EFCF,>FF3F,>3FFF    ;
+PAT14  DATA >0307,>0F1F,>3F3F,>7FFF    ;
+PAT15  DATA >FFFF,>FEFC,>F8F0,>E0C0    ;
+PAT16  DATA >0000,>0000,>0001,>070F    ;
+PAT17  DATA >0000,>031F,>7FFF,>FFFF    ;
+PAT18  DATA >1F7F,>FFFF,>FFFF,>FFFF    ;
+PAT19  DATA >F8F8,>FCFC,>FEFE,>FFFF    ;
+PAT20  DATA >FFFF,>FF7F,>7E78,>7060    ;
+PAT21  DATA >E0E0,>C000,>030F,>3FFF    ;
+PAT22  DATA >0001,>1FFF,>FFFF,>FFF8    ;
+PAT23  DATA >1FFF,>FFFF,>FFFF,>FF01    ;
+PAT24  DATA >0F03,>0100,>0000,>0000    ;
+PAT25  DATA >FFFF,>FFFF,>7F7F,>7F7F    ;
+PAT26  DATA >FEFC,>FCF8,>F0E0,>E1F7    ;
+PAT27  DATA >0307,>1F3F,>7FFF,>FFFF    ;
+PAT28  DATA >C0E0,>E0E0,>E0E0,>E0F0    ;
+PAT29  DATA >0F0F,>0F0F,>0F0F,>0F0F    ;
+PAT30  DATA >F8F8,>F0F0,>F0F0,>F0E0    ;
+PAT31  DATA >0000,>0000,>1018,>1C3C    ;
+PAT32  DATA >0000,>0101,>0100,>0000    ;
+PAT33  DATA >7FFF,>FFFF,>FFFF,>FF7F    ;
+PAT34  DATA >FFFF,>FFFF,>FFFF,>FF7F    ;
+PAT35  DATA >FEFC,>FCF8,>F0E0,>C081    ;
+PAT36  DATA >0307,>0F1F,>3F7F,>FFFF    ;
+PAT37  DATA >FFFF,>FFE1,>C0C0,>8000    ;
+PAT38  DATA >FFFF,>FFFF,>3F0F,>070E    ;
+PAT39  DATA >F0E0,>E0C0,>8000,>0000    ;
+PAT40  DATA >7F1F,>0703,>0707,>0F1F    ;
+PAT41  DATA >FEFC,>F0F0,>F0F0,>F0F0    ;
+PAT42  DATA >0F0F,>0707,>0707,>0707    ;
+PAT43  DATA >F8F0,>E0C0,>C0C0,>C0C0    ;
+PAT44  DATA >3F3F,>3F3F,>3F3F,>3F1F    ;
+PAT45  DATA >F0F0,>F0F0,>F8F0,>F8F0    ;
+PAT46  DATA >070F,>0706,>0606,>0400    ;
+PAT47  DATA >0101,>0303,>0606,>0C0C    ;
+PAT48  DATA >E3C3,>8707,>070F,>0F0F    ;
+PAT49  DATA >C0E0,>E0F0,>F0F8,>F8F8    ;
+PAT50  DATA >0606,>0203,>0301,>0101    ;
+PAT51  DATA >0000,>0000,>8080,>8080    ;
+PAT52  DATA >7F1F,>0F07,>0300,>0000    ;
+PAT53  DATA >F0FC,>FFFF,>FFFF,>7F3F    ;
+PAT54  DATA >0707,>8FFF,>FFFE,>FEFE    ;
+PAT55  DATA >C080,>8000,>0000,>0000    ;
+PAT56  DATA >F8F0,>F0E0,>E0C0,>C080    ;
+PAT57  DATA >0303,>0301,>0101,>0000    ;
+PAT58  DATA >FFFF,>FFFF,>FFFE,>F870    ;
+PAT59  DATA >1F9F,>9E8C,>0000,>0000    ;
+PAT60  DATA >1F1F,>1F3F,>1F3F,>3F3F    ;
+PAT61  DATA >C0C0,>C0E0,>E0E0,>E0F0    ;
+PAT62  DATA >FF7F,>7F7F,>7F3F,>3F3F    ;
+PAT63  DATA >FFFF,>FFFE,>FCF8,>F8E0    ;
+PAT64  DATA >1303,>070F,>1F1F,>3F7F    ;
+PAT65  DATA >FFFF,>FFFF,>FEFC,>FCF8    ;
+PAT66  DATA >7973,>E7CF,>DF9F,>3F7F    ;
+PAT67  DATA >FFFF,>FFFE,>FCF8,>F8F0    ;
+PAT68  DATA >CC80,>7070,>7000,>0000    ;
+PAT69  DATA >0000,>0000,>0000,>0100    ;
+PAT70  DATA >0000,>0101,>6363,>0F1F    ;
+PAT71  DATA >7FFF,>FFFF,>FFFF,>FFFF    ;
+PAT72  DATA >0703,>0003,>0303,>070F    ;
+PAT73  DATA >FEFC,>F8F8,>F0E0,>C0C0    ;
+PAT74  DATA >0703,>0301,>0000,>0000    ;
+PAT75  DATA >FFFF,>FFFF,>7F3F,>0F01    ;
+PAT76  DATA >FFFF,>FFFF,>FFFF,>FFF8    ;
+PAT77  DATA >FEFC,>F8F0,>E080,>0000    ;
+PAT78  DATA >0000,>1115,>1515,>0A00    ;
+PAT79  DATA >0000,>3844,>7C40,>3800    ;
+PAT80  DATA >0F07,>0301,>0000,>0000    ;
+PAT81  DATA >FFFF,>FFFE,>FC78,>3000    ;
+PAT82  DATA >C080,>0000,>0000,>0000    ;
+PAT83  DATA >1F1F,>1F1F,>1F1F,>1F1F    ;
+PAT84  DATA >E0E0,>E0E0,>E0F0,>F0F0    ;
+PAT85  DATA >0F07,>0703,>0301,>0101    ;
+PAT86  DATA >C0C0,>C0C0,>E0C0,>E0E0    ;
+PAT87  DATA >0000,>0107,>0F1F,>7FFF    ;
+PAT88  DATA >0000,>0605,>0505,>0500    ;
+PAT89  DATA >0000,>8E41,>4F51,>4F00    ;
+PAT90  DATA >2020,>2429,>3129,>2400    ;
+PAT91  DATA >0000,>E010,>F000,>E000    ;
+PAT92  DATA >0101,>0D13,>1113,>0D00    ;
+PAT93  DATA >0000,>3945,>7D41,>3900    ;
+PAT94  DATA >0000,>A354,>5454,>5300    ;
+PAT95  DATA >0000,>8F50,>5E41,>9E00    ;
+PAT96  DATA >0101,>0101,>0101,>0101    ;
+PAT97  DATA >F8F8,>F8F8,>F8F8,>F8F8    ;
+PAT98  DATA >0000,>0000,>0007,>0F3F    ;
+PAT99  DATA >0000,>0000,>E0FC,>FFFF    ;
+PAT100 DATA >3F3F,>3F3F,>7F3F,>7FFF    ;
+PAT101 DATA >F0E0,>F0E0,>E0E0,>E0E0    ;
+PAT102 DATA >0F1F,>3E7C,>F8F8,>F060    ;
+PAT103 DATA >0000,>0000,>0000,>0000    ;
+PAT104 DATA >FFFF,>FEFE,>FFFF,>FFFF    ;
+PAT105 DATA >0000,>0004,>00F0,>FFFF    ;
+PAT106 DATA >0000,>0006,>0600,>E1F1    ;
+PAT107 DATA >0F1F,>3F7F,>7FFF,>FFFF    ;
+PAT108 DATA >FFFF,>FEFC,>FFFF,>FFFF    ;
+PAT109 DATA >8031,>3307,>CFEF,>FFFF    ;
+PAT110 DATA >0000,>0000,>0000,>1133    ;
+PAT111 DATA >0F1F,>3F3F,>7FFF,>FFFF    ;
+PAT112 DATA >C000,>0000,>0000,>00C0    ;
+PAT113 DATA >030F,>1F1F,>1F1F,>0F1F    ;
+PAT114 DATA >F0F8,>F8F8,>F8F8,>F8F8    ;
+PAT115 DATA >FF3F,>3F1F,>1F0F,>0E00    ;
+PAT116 DATA >FEF8,>F0C0,>8002,>0E1F    ;
+PAT117 DATA >7FFF,>FFFF,>FFFF,>FFFF    ;
+PAT118 DATA >FFFF,>FFFF,>FFFF,>FFFE    ;
+PAT119 DATA >0000,>8080,>0001,>0103    ;
+PAT120 DATA >8080,>8000,>0000,>0000    ;
+PAT121 DATA >0000,>0000,>0000,>0007    ;
+PAT122 DATA >0000,>0000,>0020,>70F0    ;
+PAT123 DATA >0000,>0000,>0000,>C0C0    ;
+PAT124 DATA >0F0F,>0F0F,>0F0F,>0F0F    ;
+PAT125 DATA >1F1F,>3F3F,>3F3F,>7F7F    ;
+PAT126 DATA >C1C1,>C080,>8000,>060C    ;
+PAT127 DATA >FFFF,>FFFF,>7F7F,>7F3F    ;
+PAT128 DATA >FDFB,>F7E7,>FFFF,>FF7F    ;
+PAT129 DATA >FFFF,>FFF9,>F0E0,>C081    ;
+PAT130 DATA >FFFE,>FCFC,>F8F0,>F0CC    ;
+PAT131 DATA >8000,>0000,>0000,>0000    ;
+PAT132 DATA >FFFF,>FF7F,>0703,>0000    ;
+PAT133 DATA >FFFF,>FFFE,>FC3D,>0303    ;
+PAT134 DATA >FFFF,>FF7F,>FFFF,>FFFF    ;
+PAT135 DATA >FFFF,>FFFF,>FFFF,>FEFC    ;
+PAT136 DATA >80C0,>C0E0,>E0E0,>F0F0    ;
+PAT137 DATA >0081,>87FF,>FFFF,>FEFF    ;
+PAT138 DATA >FCF8,>F0C0,>8000,>0000    ;
+PAT139 DATA >0103,>0707,>0F0F,>1F1F    ;
+PAT140 DATA >FFFF,>FFFF,>FFFE,>FCFC    ;
+PAT141 DATA >E3E3,>C78F,>0F1F,>1F3F    ;
+PAT142 DATA >C0C0,>8000,>0000,>0000    ;
+PAT143 DATA >0F07,>0707,>0707,>0303    ;
+PAT144 DATA >0303,>0303,>0101,>0100    ;
+PAT145 DATA >C0C0,>C0C0,>C0C0,>E0E0    ;
+PAT146 DATA >3F1F,>1F1F,>1F1F,>1F3F    ;
+PAT147 DATA >F8F8,>F0F8,>F8F8,>F8FC    ;
+PAT148 DATA >0000,>0000,>0000,>0001    ;
+PAT149 DATA >1818,>3830,>7070,>E0E0    ;
+PAT150 DATA >1F1F,>1F1F,>3F3F,>3F3F    ;
+PAT151 DATA >8080,>0000,>0000,>0000    ;
+PAT152 DATA >BF8F,>8781,>8080,>0000    ;
+PAT153 DATA >FFFF,>FFFF,>FF7F,>3F1F    ;
+PAT154 DATA >E0F0,>F8FC,>FEFF,>FFFF    ;
+PAT155 DATA >0000,>0000,>0000,>80C0    ;
+PAT156 DATA >7F1F,>0200,>0000,>0000    ;
+PAT157 DATA >1F3F,>1F1F,>1F1F,>0F0F    ;
+PAT158 DATA >F0F8,>FCFE,>FFFF,>FFFF    ;
+PAT159 DATA >0000,>0000,>80E0,>FFFF    ;
+PAT160 DATA >F0E0,>C080,>8000,>0000    ;
+PAT161 DATA >8101,>000C,>0C00,>0103    ;
+PAT162 DATA >1F1F,>1FB3,>270F,>DF9F    ;
+PAT163 DATA >FFFF,>FFFE,>FCFC,>F8F1    ;
+PAT164 DATA >8F9F,>3F3F,>7FFF,>FFFF    ;
+PAT165 DATA >FFFC,>F8F0,>F0F0,>C080    ;
+PAT166 DATA >3F00,>E0E0,>E000,>0000    ;
+PAT167 DATA >E000,>0000,>0000,>0000    ;
+PAT168 DATA >C0C0,>C0C0,>C080,>0000    ;
+PAT169 DATA >0000,>0000,>0000,>0000    ;
+PAT170 DATA >0000,>0000,>0000,>0000    ;
+PAT171 DATA >0000,>0000,>0000,>0000    ;
+PAT172 DATA >0000,>0000,>0000,>0000    ;
+PAT173 DATA >0000,>0000,>0000,>0000    ;
+PAT174 DATA >0000,>0000,>0000,>0000    ;
+PAT175 DATA >0000,>0000,>0000,>0000    ;
+       
+
+
+
+* uninitialized data
+SAVE     EQU $				      * return save
+SAVE2    EQU SAVE+2 				* second level return save
+state		 equ SAVE2+2				* animation state
+stdata	 equ state+2				* data for current state
+stdata2	 equ stdata+2				* secondary state data
+
+*	end

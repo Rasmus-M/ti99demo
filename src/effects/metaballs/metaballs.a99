@@ -205,9 +205,6 @@ FRAME
         MOV  R11, @SAVR11
         LWPI FXWP
         
-* update color offset (wraps around ok)
-				A @COLSTP,@COLOFF
-        
 * Enable screen
         LI   R0, >01E2
         BL   @VWTR
@@ -254,8 +251,6 @@ RETURN
         RT
   
 SAVR11  DATA >0000
-COLOFF	DATA >0000
-COLSTP	DATA >F000
 POS     DATA 3, 3, 30, 27
 
 *********************************************************************
@@ -302,8 +297,7 @@ NT
         SLA  R5, 1
         SLA  R7, 1
         LI   R3, VDPWD
-;        CLR  R13                 ; Bias
-			  MOV @COLOFF,R13					; Tursi - increment bias each frame
+        CLR  R13                 ; Bias
         LI   R15,>0200
 FLPY    LI   R2, 32
         MOV  R12, R4

@@ -1479,6 +1479,7 @@ SCNLST
        DATA >0017, >0500  ; Bank 23: Multisplit                        Mode 1/2/3
        DATA >0013, >0500  ; Bank 19: Splitscreen 3D scroller           Mode 1
        DATA >001D, >1E00  ; Bank 29: Credits scroller                  Mode 1
+       DATA >0022, >0500  ; Bank 34: final splash                      Mode 1
        DATA >0000, >0000  ; Zero signifies reboot
 
        .ifdef PACKDISK
