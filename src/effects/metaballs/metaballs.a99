@@ -67,7 +67,20 @@ INIT    MOV  R11, @SAVR11
 * Color Table       >2000   >27FF
 * Sprite Patterns   >1800   >1FFF (room for 256 8x8 sprites)
 
-        CLR  R15
+* Clear name table
+       LI   R0, >1800 | >4000
+       MOVB @LBR0,@VDPWA
+       MOVB R0, @VDPWA
+       LI   R0,VDPWD
+       CLR  R1
+       LI   R2,>300
+NTLP   MOVB R1,*R0
+       DEC  R2
+       JNE  NTLP
+
+       LWPI CTRLWP                     ; Added by Tursi
+       BL   @PLAYSNG                   ; Added by Asmusr
+       LWPI FXWP                       ; Added by Tursi
 
 * Sprites patterns
        LI   R0, >1800 | >4000

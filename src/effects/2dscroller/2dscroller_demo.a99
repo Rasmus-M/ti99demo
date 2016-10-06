@@ -206,10 +206,10 @@ ENDFR2 MOV  R5,R0
        LI   R1,>F0
        S    R4,R1
        SWPB R1
-       MOVB R1,@SPRATT+9
-       MOVB R1,@SPRATT+13
-       LI   R0,SPRATB+8
-       LI   R1,SPRATT+8
+       MOVB R1,@SPRATT+25
+       MOVB R1,@SPRATT+29
+       LI   R0,SPRATB+24
+       LI   R1,SPRATT+24
        LI   R2,8
        BL   @VDPCP
        AI   R4,16
@@ -343,7 +343,7 @@ UPDSPR MOV  R11,*R10+                  ; Push return address onto the stack
        CI   R0,0
        JLT  UPDSP3
        LI   R3,FLARES
-       LI   R4,SPRATB+16
+       LI   R4,SPRATB+32
        MOV  @NFLRS,R5
 UPDSP1 MOV  *R3,R6
        JEQ  UPDSP2
@@ -372,7 +372,7 @@ UPDSP2 LI   R1,192-16
        MOV  R0,*R3
 *      Animate flares
 UPDSP3 LI   R3,FLARES
-       LI   R4,SPRATB+16+2
+       LI   R4,SPRATB+32+2
        MOV  @NFLRS,R5
 UPDSP4 MOV  *R3,R6
        JEQ  UPDSP6
@@ -410,7 +410,7 @@ INISPR MOV  R11,*R10+			* Push return address onto the stack
 	   BL	@VDPCP
 	   LI	R0,SPRATB
 	   LI	R1,SPRATT
-       LI   R2,4+8*4
+       LI   R2,16*4
 	   BL	@VDPCP
 	   LI   R1,>D000
 	   MOVB R1,@VDPWD
@@ -503,10 +503,6 @@ GMODE1 MOVB *R1+,@R0LB
        CLR  R1
        LI   R2,>800
        BL   @VDPWR
-*      Disable sprites
-       LI   R0,SPRATB
-       LI   R1,>D000
-       BL   @VSBW
 *      Color table
        LI   R0,COLRTB
        LI   R1,>F100
@@ -657,15 +653,15 @@ BACKG3 SOCB *R5+,*R1+
 *
 * R1 is unchanged. R14 and R15 are modified
 *
-RANDL  MOV  R11,*R10+            * Push return address onto the stack
-       BL    @RAND                * Generate a random number in R0
-       ANDI    R0,>00FF            * Clear MSB: [0-255]
-       MOV    R0,R14                * Copy to R14
-       MPY    R1,R14                * width * [0-255]
-       SRL    R15,8                * (width * [0-255]) / 256
-       MOV    R15,R0                * Copy result back
-*       Return
-       DECT R10                    * Pop return address off the stack
+RANDL  MOV  R11,*R10+                  * Push return address onto the stack
+       BL   @RAND                      * Generate a random number in R0
+       ANDI R0,>00FF                   * Clear MSB: [0-255]
+       MOV  R0,R14                     * Copy to R14
+       MPY  R1,R14                     * width * [0-255]
+       SRL  R15,8                      * (width * [0-255]) / 256
+       MOV  R15,R0                     * Copy result back
+*      Return
+       DECT R10                        * Pop return address off the stack
        MOV  *R10,R11
        B    *R11
 *// RANDL
@@ -678,11 +674,11 @@ RANDL  MOV  R11,*R10+            * Push return address onto the stack
 *
 * R14 and R15 are modified
 *
-RAND   LI    R14,28643            * A prime number to multiply by
-       MPY    @RANDNO,R14            * Multiply by last random number
-       AI    R15,31873            * Add a prime number
-       MOV    R15,@RANDNO            * Save this number for next time
-       MOV    R15,R0
+RAND   LI   R14,28643                  * A prime number to multiply by
+       MPY  @RANDNO,R14                * Multiply by last random number
+       AI   R15,31873                  * Add a prime number
+       MOV  R15,@RANDNO                * Save this number for next time
+       MOV  R15,R0
        B    *R11
 *// RAND
 
@@ -861,9 +857,13 @@ PAT9   DATA >0000,>3E20,>2020,>2000
 *
 SPRATT BYTE >FF,>00,>00,>07
 	   BYTE >AF,>00,>08,>07
+	   BYTE >FF,>70,>04,>07
+	   BYTE >AF,>70,>0C,>07
+       BYTE >FF,>80,>00,>07
+	   BYTE >AF,>80,>08,>07
 	   BYTE >FF,>F0,>04,>07
 	   BYTE >AF,>F0,>0C,>07
-	   BYTE >C0,>00,>10,>02
+       BYTE >C0,>00,>10,>02
 	   BYTE >C0,>00,>10,>03
 	   BYTE >C0,>00,>10,>0A
 	   BYTE >C0,>00,>10,>0C
