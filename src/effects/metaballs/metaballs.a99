@@ -68,7 +68,7 @@ INIT    MOV  R11, @SAVR11
 * Sprite Patterns   >1800   >1FFF (room for 256 8x8 sprites)
 
 * Clear name table
-       LI   R0, >1800 | >4000
+       LI   R0, >2800 | >4000
        MOVB @LBR0,@VDPWA
        MOVB R0, @VDPWA
        LI   R0,VDPWD
