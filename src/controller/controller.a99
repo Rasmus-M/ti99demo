@@ -934,7 +934,7 @@ SECMOD
        
 * Load all files to SAMS
        .ifdef SAMS
-FCOUNT EQU  34                         ; Number of files to load
+FCOUNT EQU  35                         ; Number of files to load
 *      Clear screen and re-enable it (in case of packdisk above)
        CLR  R0
        LI   R1,>2000
@@ -1093,8 +1093,12 @@ LOOP
        C    *R6,R7
        JEQ  NOLDMSX
 
+			 CLR  R8
+       CLR  @CURSNG
+       BL   @STSTOP         ; Stop the music (at this point, we need to clear all the above)
+       
        MOV  *R6,R7          ; Save current song indices
-       BL   @STSTOP         ; Stop the music
+       JEQ  NOLDMSX					; no music for final effect
        
 * Load song into high area memory at >F000 (we have 4K to work with)
        
@@ -1103,7 +1107,6 @@ LOOP
        SRL  R0,8            ; Shift high byte down
        SRL  R3,7            ; Low byte of R3 = song index * 2
 
-       CLR  @CURSNG
        LI   R1,SONGMEM      ; RAM destination in R1
        LI   R2,>1000        ; Number of bytes to copy in R2
        BL   @LDTORAM        ; Copy from bank / file index R0 to RAM at R1
@@ -1479,7 +1482,7 @@ SCNLST
        DATA >0017, >0500  ; Bank 23: Multisplit                        Mode 1/2/3
        DATA >0013, >0500  ; Bank 19: Splitscreen 3D scroller           Mode 1
        DATA >001D, >1E00  ; Bank 29: Credits scroller                  Mode 1
-       DATA >0022, >0500  ; Bank 34: final splash                      Mode 1
+       DATA >0022, >0000  ; Bank 34: final splash                      Mode 1
        DATA >0000, >0000  ; Zero signifies reboot
 
        .ifdef PACKDISK

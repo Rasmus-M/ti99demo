@@ -417,7 +417,7 @@ LDRDN
 
 * completely standard graphics 1 mode, EA settings
 * SIT&SDT @>0000, PDT @>0800, CT @>0380, SAL @>0300
-G1REGS DATA >81A0,>8000,>8200,>830E,>8401,>8506,>8704,>4380,>0000
+G1REGS DATA >81A0,>8000,>8200,>830E,>8401,>8506,>8704,>4300,>0000
 
 ****************************************
 * x,y coordinates of chars to draw for DSR
@@ -448,7 +448,7 @@ drawtab
 	data >0f0b,0
 	
 	data >1108,0							; R
-	data >1207,0
+	data >1207,>1208,0
 	data >1307,0
 	data >1407,0
 	data >1507,>1607,0
@@ -459,7 +459,7 @@ drawtab
 	data >130b,>140b,>130c,0
 	data >140c,>150c,>140d,0
 	data >150d,>160c,>160d,0
-	data >1208,>1308,0
+	data >1308,0
 	data >1209,>1309,0
 	data >120a,0
 	data >120b,0
@@ -467,7 +467,7 @@ drawtab
 	data >120d,0
 	
 	data >080b,>090a,>090b,>0a0a,>0b0a,>1808,>1809,>1909,>190a,0	; quotes
-	data >090c,>090c,>0a0b,>0b0b,>1609,>1709,>180a,0
+	data >080c,>090c,>0a0b,>0b0b,>1609,>1709,>180a,0
 	data >080d,>090d,>0a0c,>0b0c,>160a,>170a,>180b,0
 	data >0a0d,>150a,>150b,>160b,>170b,0
 	data >170c,>180c,0
