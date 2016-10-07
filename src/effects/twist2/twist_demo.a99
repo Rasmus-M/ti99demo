@@ -104,6 +104,22 @@ INISPR MOV  R0,*R1
        LI   R1,SCRLTX
        MOV  R1,@TXTPTR
        CLR  @TICK
+*      Sprite mask
+       LI   R4,2
+       LI   R0,SPRATB
+INISP0 BL   @VWAD
+       LI   R3,VDPWD
+       LI   R2,4
+INISP1 LI   R1,SPRMSK
+       MOVB *R1+,*R3
+       MOVB *R1+,*R3
+       MOVB *R1+,*R3
+       MOVB *R1+,*R3
+       DEC  R2
+       JNE  INISP1
+       AI   R0,>80
+       DEC  R4
+       JNE  INISP0
 *      Screen on
        LI   R0,>01E2
        BL   @VWTR
@@ -168,7 +184,7 @@ MAIN1  DIV  R2,R0
        INC  @TICK
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,3000
+       CI   R1,2800
        JL   RETURN
        SETO R0
 *      Return
@@ -339,7 +355,7 @@ UPDSP6 AI   R1,SPRSIZ
        INV  R0
        ANDI R0,>1
        SLA  R0,7
-       AI   R0,SPRATB
+       AI   R0,SPRATB+16
        BL   @VWAD
        LI   R0,VDPWD
        LI   R1,SPRDAT
@@ -423,6 +439,7 @@ SCROL4 AI   R1,16                       ; Next 2 characters
 * R0: VDP address
 *
 BGRND  MOV  R11,*R10+                  ; Push return address onto the stack
+       MOV  R0,R8
        LI   R4,>FB00
        LI   R5,>FC00
        LI   R6,>FD00
@@ -446,6 +463,17 @@ BGRND3 MOVB R5,*R1
        BL   @PLAYSNG
        DEC  R3
        JNE  BGRND1
+*      Red tube
+       MOV  R8,R0
+       AI   R0,11*32
+       LI   R1,>F900
+       LI   R2,20
+       BL   @VDPWR
+       MOV  R8,R0
+       AI   R0,12*32
+       LI   R1,>FA00
+       LI   R2,20
+       BL   @VDPWR
 *      Return
        DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
@@ -584,12 +612,12 @@ GMODE1 MOVB *R1+,@R0LB
        LI   R2,>800
        BL   @VDPCP
 *      Sprite end markers
-       LI   R0,NSPR*2*4+SPRATB
-       LI   R1,>D000
-       BL   @VSBW
-       LI   R0,NSPR*2*4+SPRATB+>80
-       LI   R1,>D000
-       BL   @VSBW
+;       LI   R0,NSPR*2*4+SPRATB+16
+;       LI   R1,>D000
+;       BL   @VSBW
+;       LI   R0,NSPR*2*4+SPRATB+>80+16
+;       LI   R1,>D000
+;       BL   @VSBW
 *      Return
        DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
@@ -822,8 +850,10 @@ SPRSIZ EQU  16
 SPRDAT BSS  NSPR*SPRSIZ
 SPREND
 
-SCRLTX TEXT "NOW WE CONTINUE WITH SOME SCANLINE EFFECTS......  "
-       TEXT "THESE MIGHT NOT WORK IN ALL EMULATORS......  "
+SPRMSK BYTE >57,>00,>FC,>00
+
+SCRLTX TEXT "WE CONTINUE WITH SCANLINE EFFECTS THAT "
+       TEXT "MIGHT NOT WORK IN ALL EMULATORS.....             "
        BYTE 0
 
        EVEN

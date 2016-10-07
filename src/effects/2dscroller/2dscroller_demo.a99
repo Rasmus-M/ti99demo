@@ -43,11 +43,13 @@ PLYRWS EQU  >8320
 STACK  EQU  >8340                      ; Subroutine stack
 RANDNO EQU  STACK+8                    ; Random number
 SCRLX  EQU  RANDNO+2                   ; Vertical scroll offset
-COLLP  EQU  SCRLX+2                    ; Column loop
+NFLRS  EQU  SCRLX+2                    ; Number of flares
+SPRMRG EQU  NFLRS+2                    ; Right margin for showing flares
+COLLP  EQU  SPRMRG+2                   ; Column loop
 CPYLP  EQU  COLLP+>4E                  ; Copy loop
 PADMAX EQU  CPYLP+>22
 
-NFLRS  EQU  8
+RUNFRM EQU  3000
 
 ********************************************************************************
 *
@@ -67,7 +69,6 @@ TOPINI LI   R10,STACK
        BL   @GMODE
        BL   @INIT
        BL   @BACKG
-       BL   @INISPR
 *      Clear buffer
        LI   R1,BUFFER
        LI   R2,64*24
@@ -89,6 +90,11 @@ CPPAD2 MOV  *R1+,*R0+
        JNE  CPPAD2
 *      Init variables
        CLR  @SCRLX
+       LI   R0,8
+       MOV  R0,@NFLRS
+       CLR  @SPRMRG
+*      Init sprites
+       BL   @INISPR
 *      Screen on
        LI   R0,>01E2
        BL   @VWTR
@@ -104,9 +110,17 @@ CPPAD2 MOV  *R1+,*R0+
 *
 TOPFRM LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
-*      Set name table
        MOV  @SCRLX,R0
-       DECT  R0
+       CI   R0,RUNFRM
+       JLT  TOPFR1
+       JGT  TOPFR3
+       BL   @INIEND
+       JMP  TOPFR2
+TOPFR3 BL   @ENDFRM
+       JMP  TOPFR2
+*      Normal frame
+*      Set name table
+TOPFR1 DECT  R0
        DECT  R0
        ANDI R0,4
        SRL  R0,2
@@ -123,7 +137,7 @@ TOPFRM LI   R10,STACK
 *      Update name table
        BL   @UPDNT
 *      Update sprites
-       BL   @UPDSPR
+TOPFR2 BL   @UPDSPR
 *      Odd music frame
        BL   @PLAYSNG
 *      Update variables
@@ -132,13 +146,80 @@ TOPFRM LI   R10,STACK
 *      Check for finish
        CLR  R0
        MOV  @SCRLX,R1
-       CI   R1,3000
+       CI   R1,RUNFRM+500
        JL   RETURN
        SETO R0
 *      Return
 RETURN DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
        B    *R11
+
+
+***************************************************************************
+*
+* Init end
+*
+INIEND MOV  R11,*R10+                  ; Push return address onto the stack
+*      Fill name table
+       LI   R0,NAMET1
+       CLR  R1
+       LI   R2,>300
+       BL   @VDPWR
+*      Set color set 1 to black/cyan
+       LI   R0,COLRTB+1
+       LI   R1,>1700
+       BL   @VSBW
+*      Clear pattern 8
+       LI   R0,8*8+PTRNT1
+       CLR  R1
+       LI   R2,8
+       BL   @VDPWR
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// INIEND
+
+***************************************************************************
+*
+* End frame
+*
+ENDFRM MOV  R11,*R10+                  ; Push return address onto the stack
+       MOV  R0,R4
+       AI   R4,-RUNFRM
+       SRL  R4,4
+       CI   R4,31
+       JGT  ENDFR1
+*      Clear a column
+       LI   R5,NAMET1+31
+       S    R4,R5
+       LI   R6,24
+ENDFR2 MOV  R5,R0
+       LI   R1,>0800
+       BL   @VSBW
+       AI   R5,32
+       DEC  R6
+       JNE  ENDFR2
+*      Move corner sprites
+       INC  R4
+       SLA  R4,3
+       LI   R1,>F0
+       S    R4,R1
+       SWPB R1
+       MOVB R1,@SPRATT+25
+       MOVB R1,@SPRATT+29
+       LI   R0,SPRATB+24
+       LI   R1,SPRATT+24
+       LI   R2,8
+       BL   @VDPCP
+       AI   R4,16
+       MOV  R4,@SPRMRG
+       JMP  ENDFR1
+*      Return
+ENDFR1 DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// ENDFRM
 
 ***************************************************************************
 *
@@ -262,8 +343,8 @@ UPDSPR MOV  R11,*R10+                  ; Push return address onto the stack
        CI   R0,0
        JLT  UPDSP3
        LI   R3,FLARES
-       LI   R4,SPRATB+16
-       LI   R5,NFLRS
+       LI   R4,SPRATB+32
+       MOV  @NFLRS,R5
 UPDSP1 MOV  *R3,R6
        JEQ  UPDSP2
        INCT R3
@@ -277,6 +358,8 @@ UPDSP2 LI   R1,192-16
        BL   @RANDL
        MOV  R0,R8
        LI   R1,256-16
+       S    @SPRMRG,R1
+       JLT  UPDSP3
        BL   @RANDL
        MOV  R0,R9
        MOV  R4,R0
@@ -289,8 +372,8 @@ UPDSP2 LI   R1,192-16
        MOV  R0,*R3
 *      Animate flares
 UPDSP3 LI   R3,FLARES
-       LI   R4,SPRATB+16+2
-       LI   R5,NFLRS
+       LI   R4,SPRATB+32+2
+       MOV  @NFLRS,R5
 UPDSP4 MOV  *R3,R6
        JEQ  UPDSP6
        CI   R6,FLRANE-2
@@ -327,8 +410,10 @@ INISPR MOV  R11,*R10+			* Push return address onto the stack
 	   BL	@VDPCP
 	   LI	R0,SPRATB
 	   LI	R1,SPRATT
-	   LI	R2,4+NFLRS*4+1
+       LI   R2,16*4
 	   BL	@VDPCP
+	   LI   R1,>D000
+	   MOVB R1,@VDPWD
 	   DECT R10					* Pop return address off the stack
 	   MOV  *R10,R11
 	   B	*R11
@@ -418,10 +503,6 @@ GMODE1 MOVB *R1+,@R0LB
        CLR  R1
        LI   R2,>800
        BL   @VDPWR
-*      Disable sprites
-       LI   R0,SPRATB
-       LI   R1,>D000
-       BL   @VSBW
 *      Color table
        LI   R0,COLRTB
        LI   R1,>F100
@@ -533,7 +614,7 @@ BACKG  MOV  R11,*R10+                  ; Push return address onto the stack
 *      Read patterns
        CLR  R0
        LI   R1,BUFFER
-       LI   R2,>2000
+       LI   R2,>1000
        BL   @VMBR
 *      Patch patterns
        LI   R1,BUFFER
@@ -572,15 +653,15 @@ BACKG3 SOCB *R5+,*R1+
 *
 * R1 is unchanged. R14 and R15 are modified
 *
-RANDL  MOV  R11,*R10+            * Push return address onto the stack
-       BL    @RAND                * Generate a random number in R0
-       ANDI    R0,>00FF            * Clear MSB: [0-255]
-       MOV    R0,R14                * Copy to R14
-       MPY    R1,R14                * width * [0-255]
-       SRL    R15,8                * (width * [0-255]) / 256
-       MOV    R15,R0                * Copy result back
-*       Return
-       DECT R10                    * Pop return address off the stack
+RANDL  MOV  R11,*R10+                  * Push return address onto the stack
+       BL   @RAND                      * Generate a random number in R0
+       ANDI R0,>00FF                   * Clear MSB: [0-255]
+       MOV  R0,R14                     * Copy to R14
+       MPY  R1,R14                     * width * [0-255]
+       SRL  R15,8                      * (width * [0-255]) / 256
+       MOV  R15,R0                     * Copy result back
+*      Return
+       DECT R10                        * Pop return address off the stack
        MOV  *R10,R11
        B    *R11
 *// RANDL
@@ -593,11 +674,11 @@ RANDL  MOV  R11,*R10+            * Push return address onto the stack
 *
 * R14 and R15 are modified
 *
-RAND   LI    R14,28643            * A prime number to multiply by
-       MPY    @RANDNO,R14            * Multiply by last random number
-       AI    R15,31873            * Add a prime number
-       MOV    R15,@RANDNO            * Save this number for next time
-       MOV    R15,R0
+RAND   LI   R14,28643                  * A prime number to multiply by
+       MPY  @RANDNO,R14                * Multiply by last random number
+       AI   R15,31873                  * Add a prime number
+       MOV  R15,@RANDNO                * Save this number for next time
+       MOV  R15,R0
        B    *R11
 *// RAND
 
@@ -762,8 +843,7 @@ VDPW7  DATA >0007
 *
 * Variables and Data
 *
-TXT    TEXT '    WELCOME TO THE TI-99/4A MEGADEMO ...    '
-*       TEXT '    TMS9900 CPU, TMS9918A VDP, TMS9919 PSG ...         '
+TXT    TEXT '    WELCOME TO THE TI-99/4A MEGADEMO        '
        BYTE 0
        EVEN
 
@@ -776,10 +856,14 @@ PAT9   DATA >0000,>3E20,>2020,>2000
 * Sprite attributes
 *
 SPRATT BYTE >FF,>00,>00,>07
-	   BYTE >FF,>F0,>04,>07
 	   BYTE >AF,>00,>08,>07
+	   BYTE >FF,>70,>04,>07
+	   BYTE >AF,>70,>0C,>07
+       BYTE >FF,>80,>00,>07
+	   BYTE >AF,>80,>08,>07
+	   BYTE >FF,>F0,>04,>07
 	   BYTE >AF,>F0,>0C,>07
-	   BYTE >C0,>00,>10,>02
+       BYTE >C0,>00,>10,>02
 	   BYTE >C0,>00,>10,>03
 	   BYTE >C0,>00,>10,>0A
 	   BYTE >C0,>00,>10,>0C
@@ -787,12 +871,15 @@ SPRATT BYTE >FF,>00,>00,>07
 	   BYTE >C0,>00,>10,>03
 	   BYTE >C0,>00,>10,>0A
 	   BYTE >C0,>00,>10,>0C
-	   BYTE >D0,>00
 
 FLRANI BYTE >10,>14,>18,>1C,>20,>24,>28,>2C
 	   BYTE	>2C,>28,>24,>20,>1C,>18,>14,>10
 FLRANE
 
+FLARES DATA >0000,>0000,>0000,>0000
+	   DATA >0000,>0000,>0000,>0000
+	   DATA >0000,>0000,>0000,>0000
+	   DATA >0000,>0000,>0000,>0000
 *
 * Sprite patterns
 *
@@ -813,10 +900,6 @@ CORNR4 DATA >0000,>0000,>0000,>0000	* Color 1
 	   DATA >0000,>0000,>0107,>1FFF
 	   DATA >0101,>0103,>0307,>070F
 	   DATA >1F3F,>7FFF,>FFFF,>FFFF
-FLARES DATA >0000,>0000,>0000,>0000
-	   DATA >0000,>0000,>0000,>0000
-	   DATA >0000,>0000,>0000,>0000
-	   DATA >0000,>0000,>0000,>0000
 FLARE1 DATA >0000,>0000,>0000,>0001    * Color 15
        DATA >0000,>0000,>0000,>0000
        DATA >0000,>0000,>0000,>0000
