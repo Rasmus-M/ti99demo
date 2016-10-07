@@ -88,6 +88,9 @@ TOPFRM LI   R10,STACK
        MOV  R0,*R6                     ; Set Y position
        LI   R0,>0100                   ; Start velocity
        MOV  R0,@ROWVY(R6)              ; Set start velocity
+       MOV  @TICK,R0
+       CI   R0,2816
+       JHE  LOOP6
        MOV  @NXTCOL,R0                 ; Next color table number
        MOV  R0,@ROWCLR(R6)             ; Set color table number
        DEC  R0                         ; Previous color table
@@ -101,6 +104,10 @@ LOOP1  MOV  R0,@NXTCOL                 ; Save next color table
        JHE  LOOP2
        LI   R6,ROWEND-ROWSIZ           ; Wrap to last row
 LOOP2  MOV  R6,@NXTROW                 ; Save next available row
+       JMP  LOOP3
+*      End rows
+LOOP6  LI   R0,>0050
+       MOV  R0,@ROWCLR(R6)
 *      Row loop
 LOOP3  MOV  @TOPROW,R6                 ; Pointer to row structure
 *      Set color table
@@ -132,7 +139,7 @@ LOOP5  BL   @UPDSPR
        INC  @TICK                      ; Next frame
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,2800
+       CI   R1,2*8*HEIGHT+100          ; 2 runs * 8 frames/row * 176 rows/run = 2816 frames
        JL   RETURN
        SETO R0
 *      Return
@@ -184,13 +191,15 @@ SET5T1 MOVB R1,*R0
 *
 UPDSPR MOV  R11,*R10+                  ; Push return address onto the stack
        MOV  @TICK,R0
-       CI   R0,HEIGHT*8
+       CI   R0,8*HEIGHT
        JHE  UPDSP0
        LI   R1,200
 PAUSE  DEC  R1
        JNE  PAUSE
        B    @UPDSP9
-UPDSP0 ANDI R0,>000F
+UPDSP0 CI   R0,2*8*HEIGHT
+       JHE  UPDSP7
+       ANDI R0,>000F
        JNE  UPDSP1
 *      Every 16th frame - add new sprite
        MOV  @NXTSPR,R3
