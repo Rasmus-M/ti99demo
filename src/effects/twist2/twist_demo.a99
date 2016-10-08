@@ -55,12 +55,10 @@ SAADDR EQU  NTADDR+2                   ; Sprite attribute table address
 NXTSPR EQU  SAADDR+2                   ; Next available sprite
 TXTPTR EQU  NXTSPR+2
 BARPOS EQU  TXTPTR+2                   ; Position of bar in rows (FP 12.4)
-BARSPD EQU  BARPOS+2                   ; Bar speed (FP 4.12)
-BARACC EQU  BARSPD+2                   ; Bar position (FP 4.12)
+BARSPD EQU  BARPOS+2                   ; Bar speed (FP 12.4)
 
 NSPR   EQU  14
-BSPEED EQU  >0400
-BACCL  EQU  >000C
+BSPEED EQU  >0001
 
 ********************************************************************************
 *
@@ -92,11 +90,10 @@ TOPINI LI   R10,STACK
        MOV  R0,@STEP
        LI   R0,SCRLTX
        MOV  R0,@TXTPTR
-       LI   R0,>00B0                   ; 11 in FP 12.4
+       LI   R0,>0000
        MOV  R0,@BARPOS                 ; Set red bar position
-       LI   R0,BSPEED                  ; 1/2 in FP 4.12
+       LI   R0,BSPEED
        MOV  R0,@BARSPD
-       CLR  @BARACC
        CLR  @TICK
 *      Background
        LI   R0,NAMETA
@@ -193,17 +190,17 @@ MAIN1  DIV  R2,R0
        SLA  R1,2
        MOV  R1,@STEP
 *      Move bar
-       A    @BARACC,@BARSPD
-       MOV  @BARSPD,R0
-       SRA  R0,8
-       MOV  @BARPOS,R1
-       A    R0,R1
-       MOV R1,@BARPOS
-       LI   R0,BACCL
-       CI   R1,>00B0
-       JLT  MAIN2
-       NEG  R0
-MAIN2  MOV  R0,@BARACC
+       MOV  @BARPOS,R0
+       A    @BARSPD,R0
+       CI   R0,>0180
+       JLE  MAIN2
+       MOV  @NTADDR,R0
+       LI   R1,>0400
+       XOR  R1,R0
+       MOV  R0,@NTADDR
+       BL   @BAR
+       CLR  R0
+MAIN2  MOV  R0,@BARPOS
 *      Update sprites
        BL   @UPDSPR
 *      Update tick
@@ -503,11 +500,14 @@ BGRND3 MOVB R5,*R1                     ; Bottom left
 *
 BAR    MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R3,VDPWD
-*      Bar
-       MOV  @BARPOS,R4
-       ANDI R4,>01F0
-       SLA  R4,1
+       MOV  @BARPOS,R8
+       SRA  R8,4                       ; Convert to integer
+       MOV  R8,R4
+       SLA  R4,5
        A    @NTADDR,R4
+*      Bar row 1
+       CI   R8,23
+       JGT  BAR11
        MOV  R4,R0
        BL   @VWAD
        LI   R1,>F900                   ; Top bar
@@ -518,6 +518,9 @@ BAR1   MOVB R1,*R3
        MOVB R1,*R3
        DEC  R2
        JNE  BAR1
+*      Bar row 2
+       CI   R8,22
+       JGT  BAR11
        MOV  R4,R0
        AI   R0,32
        BL   @VWAD
@@ -530,11 +533,9 @@ BAR2   MOVB R1,*R3
        DEC  R2
        JNE  BAR2
 *      Background
-       MOV  @BARPOS,R0
-       SRA  R0,4
-       CI   R0,1
+BAR11  CI   R8,1
        JLT  BAR6
-       CI   R0,21
+       CI   R8,24
        JGT  BAR6
        MOV  R4,R0
        MOV  @BARSPD,R1
@@ -560,9 +561,8 @@ BAR10  MOVB R5,*R3
        DEC  R2
        JNE  BAR10
 *      Sprite mask
-BAR6   MOV  @BARPOS,R4
-       ANDI R4,>01F0
-       SLA  R4,7
+BAR6   MOV  R8,R4
+       SLA  R4,11
        AI   R4,->0100                  ; Y
        LI   R5,>0000                   ; X
        LI   R6,>FC00                   ; Pattern
