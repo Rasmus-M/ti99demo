@@ -63,24 +63,10 @@ TICK   DATA 0
 * do the effect on all chars except 255, we'll leave that one black until everything's in place
 * that means there will be 3 black patterns around the screen
 * a further concern is we can't really move things around very much... bitmap needs to stay in the
-* same quadrant, multicolor on the same LINE. But it may look interesting to mix it up anyway,
-* and if we move it fast nobody's going to really care. Unfortunately, leaving the bitmap
-* quadrant (what's a third called?) will result in a changed pattern unless I move patterns, too,
-* which defeats the purpose of what I was trying. Let's just try a little chaos ;)
+* same quadrant, multicolor on the same LINE. 
 
-*	DEF MSTART
-
-DSRDAT DATA >2EAA				* values used by DSRs
-QUITK  DATA >1100				* CRU value for QUIT
 dat40	 data >4000				* bitfield used by the unpacker
 datff	 data >007F				* countdown for unpacker
-
-* screen timeout register - we reset this every frame we run
-* only matters if the console int is running...
-scrnto equ >83D6
-
-* interrupt hook vector
-INTFTN equ >83c4
 
 * registers for half-multicolor (sprites at >3B00)
 *
@@ -226,8 +212,8 @@ LPH#
 	B *R11
  
 ******************
-* Delay for R0 jiffies with both QUIT and Enter/Space detection
-* does it internally for the sake of the F18A versions
+* Delay for R0 jiffies
+* This is now used only by the intro and outro
 * messes with R12,R5,R1,R0
 ******************
 DELAY
@@ -238,35 +224,16 @@ WAIT2
   ABS @VDPINT
   JEQ WAIT2
 
-	MOV @INTFTN,R1
-	JEQ WAIT4
 	MOV R0,@cntsave
-	BL *R1
+	BL @MODE4I												; do the video swap
 	MOV @cntsave,R0
 WAIT4	
 	DEC R0
 	JNE WAIT2
 	
-	MOV @SAVE2,R11	* timed out
+	MOV @SAVE2,R11
 	B *R11
 
-REBOOT
-	BLWP @>0000 		* Software reset	
-	
-	
-******************
-* Set VDP R1 and >83D4 for KSCAN - value in R0 MSB
-******************
-SETR1
-	MOV R11,@SAVE
-	MOVB R0,@>83D4
-	SWPB R0
-	LI R1,>8100
-	MOVB R1,R0
-	BL @VWAD
-	MOV @SAVE,R11
-	B *R11
-	
 ******************
 * Half-multicolor interrupt	
 ******************
@@ -275,30 +242,24 @@ MODE4I
   
 	MOV @FLAG,R0		* see which frame we're on
 	JNE INTR42
+
 	SETO @FLAG
-	
-	MOV R11,R1
-	LI R0,>8000
+	LI R0,>8000			* multicolor
 	BL @VWAD
-	MOV R1,R11
 	LI R0,>81E8
 	BL @VWAD
 	JMP CHAIN
 
 INTR42
 	CLR @FLAG
-	
-	MOV R11,R1
-	LI R0,>8002
+	LI R0,>8002			* bitmap
 	BL @VWAD
-	MOV R1,R11
 	LI R0,>81E0
 	BL @VWAD
 
 CHAIN	
-* chain to the old int (music)
+* back to caller
   MOV @SAVEINT,R11
-NOINT  
 	B *R11
 	
 ******************
@@ -421,14 +382,10 @@ unpack
 	clr r5				streamcnt
 	mov r0,r6			streambase
 	
-* We'll unpack xxx bytes at a time, to allow
+* We'll unpack 256 bytes at a time, to allow
 * for interrupts to process as needed. That
 * should be fine... 
-	
-* set VDP address - we'll need to redo this every
-* xxx chars, since the int will mess with VDP ADR
-*
-* 256 chars first try - will make the pic take 1s to unpack
+* delay removed, should unpack faster
 *
 unplp1
 	mov r1,@packback	* save and restore our important regs...
@@ -437,8 +394,7 @@ unplp1
 	mov r4,@packback+6
 	mov r5,@packback+8
 	
-	li r0,1
-	bl @delay				* wait for one vblank
+	bl @PLAYSNG				* let the music play (if it's time)
 
 	mov @packback,r1	* save and restore our important regs...
 	mov @packback+2,r2
@@ -472,11 +428,7 @@ MSTART
 
     MOV  R11,@MSAVE
 
-;	LWPI >8300
 	BL @HALFM			* Set half-multicolor mode
-
-* clear interrupt
-    CLR @INTFTN
 
 * load the image, except we'll leave the very last
 * character all zeros so we can use it as a space
@@ -543,10 +495,6 @@ MSTART
 	LI R2,8
 	BL @VMBSET
 	
-* now that we're up, we can load the screen interrupt
-	LI R1,MODE4I
-	MOV R1,@INTFTN
-
 * now, at last, we can bring a screen in an animated way
 * scrnbuf contains the actual data we want to load
 	li r0,32
@@ -649,11 +597,6 @@ lplp2
 	li r4,>3800				* screen output
 	li r5,scrnbuf			* pattern buffer
 	
-;	li r0,>3800       * hack - test scanlines on clear screen
-;	li r1,>ff00
-;	li r2,768
-;	bl @vmbset
-
 scrnlp2
 	mov r4,r0					* line on screen
 	a r3,r0						* to right edge
@@ -690,11 +633,6 @@ alldon2
 	li r2,768
 	bl @VMBSET
 		
-;dnlp
-;	li R0,1
-;	bl @delay					* enable quit
-;	jmp dnlp					* and do the next frame
-
        MOV  @MSAVE,R11
        B    *R11
 
@@ -1404,19 +1342,17 @@ PICMM
  BYTE >02,>99,>69,>C6,>01,>4E,>C6,>02  * 000004D0 ..i..N..
  BYTE >C1,>00,>00,>00,>00,>00,>00,>00  * 000004D8 ........
 
-* Size of data in above array (Array may be padded but this will be correct)
-SIZE_OF_PICMM EQU 1242
-
 * uninitialized data
 SAVE     EQU $				      * return save
 SAVE2    EQU SAVE+2 				* second level return save
 SAVEINT  EQU SAVE2+2				* return save for interrupt hook
-FLAG     EQU SAVEINT+2			* frame flag
+FLAG     EQU SAVEINT+2	 		* frame flag
 packback EQU FLAG+2				  * backup memory for the unpacker
 scrnbuf  EQU packback+12		* CPU copy of the final screen image table, used for reference
 scrnbuf2 EQU scrnbuf+768		* CPU copy of the animated screen image table, used to double buffer
 cntsave  EQU scrnbuf2+768		* countdown save for delay
 charbuf  EQU cntsave+2			* used to copy the four char 255 patterns
 animcnt	 EQU charbuf+32			* animation count (so I don't need to reserve a register)
+
 
 *	end
