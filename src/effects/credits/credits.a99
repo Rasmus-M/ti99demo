@@ -111,7 +111,7 @@ FRAME  LI   R10,STACK
        BL   @VDPCP
 LOOP   CLR  R0
        MOV  @ROWNO,R1
-       CI   R1,328
+       CI   R1,324
        JLT  RETURN
        SETO R0
 *      Return
