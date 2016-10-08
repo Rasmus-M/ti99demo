@@ -28,7 +28,8 @@ PTRNTB EQU  >0000                      ; Pattern table base
 SPRPTB EQU  >1800                      ; Sprite pattern table base
 COLRTB EQU  >2000                      ; Color table base
 NAMETA EQU  >2800                      ; Name table base A
-SPRATB EQU  >2B00                      ; Sprite attribute table base
+SPRATA EQU  >2B00                      ; Sprite attribute table base A
+SPRATB EQU  >2B80                      ; Sprite attribute table base B
 NAMETB EQU  >2C00                      ; Name table base B
 
 **
@@ -49,11 +50,17 @@ TOPROW EQU  RANDNO+2                   ; FP 9.7
 SPEED  EQU  TOPROW+2                   ; FP 9.7
 STEP   EQU  SPEED+2                    ; FP 9.7
 TICK   EQU  STEP+2
-VDPADR EQU  TICK+2
-NXTSPR EQU  VDPADR+2                   ; Next available sprite
+NTADDR EQU  TICK+2                     ; Name table address
+SAADDR EQU  NTADDR+2                   ; Sprite attribute table address
+NXTSPR EQU  SAADDR+2                   ; Next available sprite
 TXTPTR EQU  NXTSPR+2
+BARPOS EQU  TXTPTR+2                   ; Position of bar in rows (FP 12.4)
+BARSPD EQU  BARPOS+2                   ; Bar speed (FP 4.12)
+BARACC EQU  BARSPD+2                   ; Bar position (FP 4.12)
 
 NSPR   EQU  14
+BSPEED EQU  >0400
+BACCL  EQU  >000C
 
 ********************************************************************************
 *
@@ -78,19 +85,37 @@ TOPINI LI   R10,STACK
        BL   @RLEDC
 *      Init
        BL   @GMODE
+*      Variables
+       LI   R0,>0100
+       MOV  R0,@SPEED
+       LI   R0,>0100
+       MOV  R0,@STEP
+       LI   R0,SCRLTX
+       MOV  R0,@TXTPTR
+       LI   R0,>00B0                   ; 11 in FP 12.4
+       MOV  R0,@BARPOS                 ; Set red bar position
+       LI   R0,BSPEED                  ; 1/2 in FP 4.12
+       MOV  R0,@BARSPD
+       CLR  @BARACC
+       CLR  @TICK
+*      Background
        LI   R0,NAMETA
+       MOV  R0,@NTADDR
+       LI   R0,SPRATA
+       MOV  R0,@SAADDR
        BL   @BGRND
        LI   R0,NAMETB
+       MOV  R0,@NTADDR
+       LI   R0,SPRATB
+       MOV  R0,@SAADDR
+       LI   R0,NAMETB
        BL   @BGRND
+*      Shaft
        LI   R0,NAMETA+26
        BL   @SHAFT
        LI   R0,NAMETB+26
        BL   @SHAFT
        CLR  @TOPROW
-       LI   R0,>0100
-       MOV  R0,@SPEED
-       LI   R0,>0100
-       MOV  R0,@STEP
 *      Init sprite data
        LI   R0,>C000
        LI   R1,SPRDAT
@@ -101,25 +126,6 @@ INISPR MOV  R0,*R1
        JNE  INISPR
        LI   R1,SPRDAT
        MOV  R1,@NXTSPR
-       LI   R1,SCRLTX
-       MOV  R1,@TXTPTR
-       CLR  @TICK
-*      Sprite mask
-       LI   R4,2
-       LI   R0,SPRATB
-INISP0 BL   @VWAD
-       LI   R3,VDPWD
-       LI   R2,4
-INISP1 LI   R1,SPRMSK
-       MOVB *R1+,*R3
-       MOVB *R1+,*R3
-       MOVB *R1+,*R3
-       MOVB *R1+,*R3
-       DEC  R2
-       JNE  INISP1
-       AI   R0,>80
-       DEC  R4
-       JNE  INISP0
 *      Screen on
        LI   R0,>01E2
        BL   @VWTR
@@ -136,26 +142,34 @@ TOPFRM LI   R10,STACK
        ANDI R0,1
        ORI  R0,>020A
        BL   @VWTR
-*      Sprite attribute table
+*      Set sprite attribute table
        MOV  @TICK,R0
        ANDI R0,1
        ORI  R0,>0556
        BL   @VWTR
 *      Scroll background
        BL   @SCROLL
-*      Set VDP address
+*      Set name table address
        LI   R0,NAMETB
        MOV  @TICK,R1
        ANDI R1,1
        SLA  R1,10
        SZC  R1,R0
-       MOV  R0,@VDPADR
+       MOV  R0,@NTADDR
+*      Set sprite attribute table address
+       MOV  @TICK,R0
+       INV  R0
+       ANDI R0,>0001
+       SLA  R0,7
+       AI   R0,SPRATA
+       MOV  R0,@SAADDR
 *      Call frame routine
-       MOV  @VDPADR,R0
-       AI   R0,20
+       LI   R0,20
        MOV  @TOPROW,R5
        MOV  @STEP,R6
        BL   @FRAMX
+*      Red bar
+       BL   @BAR
 *      Move top row
        MOV  @TOPROW,R1
        A    @SPEED,R1
@@ -178,6 +192,18 @@ MAIN1  DIV  R2,R0
        BL   @SIN
        SLA  R1,2
        MOV  R1,@STEP
+*      Move bar
+       A    @BARACC,@BARSPD
+       MOV  @BARSPD,R0
+       SRA  R0,8
+       MOV  @BARPOS,R1
+       A    R0,R1
+       MOV R1,@BARPOS
+       LI   R0,BACCL
+       CI   R1,>00B0
+       JLT  MAIN2
+       NEG  R0
+MAIN2  MOV  R0,@BARACC
 *      Update sprites
        BL   @UPDSPR
 *      Update tick
@@ -196,11 +222,12 @@ RETURN DECT R10                        ; Pop return address off the stack
 *
 * Draw frame
 *
-* R0: Name table address
+* R0: Name table offset
 * R5: Top row, FP 12.4
 * R6: Step, FP 12.4
 *
 FRAME  MOV  R11,*R10+                  ; Push return address onto the stack
+       A    @NTADDR,R0
        LI   R1,12                      ; Number of columns
        LI   R2,24                      ; Row counter
        LI   R3,VDPWD
@@ -240,11 +267,12 @@ FRAME2 DIV  R9,R4                      ; Modulus 180
 *
 * Draw frame
 *
-* R0: Name table address
+* R0: Name table offset
 * R5: Top row, FP 12.4
 * R6: Step, FP 12.4
 *
 FRAMX  MOV  R11,*R10+                  ; Push return address onto the stack
+       A    @NTADDR,R0
        LI   R1,12                      ; Number of columns
        LI   R2,12                      ; Row counter
        LI   R3,VDPWD
@@ -351,11 +379,8 @@ UPDSP6 AI   R1,SPRSIZ
        DEC  R2
        JNE  UPDSP2
 *      Upload SAT
-       MOV  @TICK,R0
-       INV  R0
-       ANDI R0,>1
-       SLA  R0,7
-       AI   R0,SPRATB+16
+       MOV  @SAADDR,R0
+       AI   R0,16
        BL   @VWAD
        LI   R0,VDPWD
        LI   R1,SPRDAT
@@ -439,41 +464,31 @@ SCROL4 AI   R1,16                       ; Next 2 characters
 * R0: VDP address
 *
 BGRND  MOV  R11,*R10+                  ; Push return address onto the stack
-       MOV  R0,R8
-       LI   R4,>FB00
-       LI   R5,>FC00
-       LI   R6,>FD00
-       LI   R7,>FE00
+       MOV  @NTADDR,R8
+       LI   R4,>FB00                   ; Top left
+       LI   R5,>FC00                   ; Bottom left
+       LI   R6,>FD00                   ; Top right
+       LI   R7,>FE00                   ; Bottom right
        LI   R3,12
+       MOV  R8,R0
        LI   R1,VDPWD
 BGRND1 BL   @VWAD
        LI   R2,10
-BGRND2 MOVB R4,*R1
-       MOVB R6,*R1
+BGRND2 MOVB R4,*R1                     ; Top left
+       MOVB R6,*R1                     ; Top right
        DEC  R2
        JNE  BGRND2
        AI   R0,32
        BL   @VWAD
        LI   R2,10
-BGRND3 MOVB R5,*R1
-       MOVB R7,*R1
+BGRND3 MOVB R5,*R1                     ; Bottom left
+       MOVB R7,*R1                     ; Bottom right
        DEC  R2
        JNE  BGRND3
        AI   R0,32
        BL   @PLAYSNG
        DEC  R3
        JNE  BGRND1
-*      Red tube
-       MOV  R8,R0
-       AI   R0,11*32
-       LI   R1,>F900
-       LI   R2,20
-       BL   @VDPWR
-       MOV  R8,R0
-       AI   R0,12*32
-       LI   R1,>FA00
-       LI   R2,20
-       BL   @VDPWR
 *      Return
        DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
@@ -482,9 +497,96 @@ BGRND3 MOVB R5,*R1
 
 *********************************************************************************
 *
+* Draw red bar
+*
+* R0: VDP name table base address
+*
+BAR    MOV  R11,*R10+                  ; Push return address onto the stack
+       LI   R3,VDPWD
+*      Bar
+       MOV  @BARPOS,R4
+       ANDI R4,>01F0
+       SLA  R4,1
+       A    @NTADDR,R4
+       MOV  R4,R0
+       BL   @VWAD
+       LI   R1,>F900                   ; Top bar
+       LI   R2,5
+BAR1   MOVB R1,*R3
+       MOVB R1,*R3
+       MOVB R1,*R3
+       MOVB R1,*R3
+       DEC  R2
+       JNE  BAR1
+       MOV  R4,R0
+       AI   R0,32
+       BL   @VWAD
+       LI   R1,>FA00                   ; Bottom bar
+       LI   R2,5
+BAR2   MOVB R1,*R3
+       MOVB R1,*R3
+       MOVB R1,*R3
+       MOVB R1,*R3
+       DEC  R2
+       JNE  BAR2
+*      Background
+       MOV  @BARPOS,R0
+       SRA  R0,4
+       CI   R0,1
+       JLT  BAR6
+       CI   R0,21
+       JGT  BAR6
+       MOV  R4,R0
+       MOV  @BARSPD,R1
+       JGT  BAR4
+       JLT  BAR5
+       JMP  BAR6
+BAR4   AI   R0,-32
+       JMP  BAR7
+BAR5   AI   R0,64
+BAR7   BL   @VWAD
+       ANDI R0,>0020
+       JNE  BAR8
+       LI   R5,>FB00                   ; Top left
+       LI   R6,>FD00                   ; Top right
+       JMP  BAR9
+BAR8   LI   R5,>FC00                   ; Bottom left
+       LI   R6,>FE00                   ; Bottom right
+BAR9   LI   R2,5
+BAR10  MOVB R5,*R3
+       MOVB R6,*R3
+       MOVB R5,*R3
+       MOVB R6,*R3
+       DEC  R2
+       JNE  BAR10
+*      Sprite mask
+BAR6   MOV  @BARPOS,R4
+       ANDI R4,>01F0
+       SLA  R4,7
+       AI   R4,->0100                  ; Y
+       LI   R5,>0000                   ; X
+       LI   R6,>FC00                   ; Pattern
+       LI   R7,>0000                   ; Color
+       MOV  @SAADDR,R0
+       BL   @VWAD
+       LI   R2,4                       ; 4 sprites in mask
+BAR3   MOVB R4,*R3
+       MOVB R5,*R3
+       MOVB R6,*R3
+       MOVB R7,*R3
+       DEC  R2
+       JNE  BAR3
+*      Return
+       DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+*// SHAFT
+
+*********************************************************************************
+*
 * Draw shaft
 *
-* R0: VDP address
+* R0: VDP address in name table
 *
 SHAFT  MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,>FF00
@@ -849,8 +951,6 @@ SPRSIZ EQU  16
 
 SPRDAT BSS  NSPR*SPRSIZ
 SPREND
-
-SPRMSK BYTE >57,>00,>FC,>00
 
 SCRLTX TEXT "WE CONTINUE WITH SCANLINE EFFECTS THAT "
        TEXT "MIGHT NOT WORK IN ALL EMULATORS.....             "
