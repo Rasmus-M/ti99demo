@@ -118,15 +118,21 @@ LOOP1  MOV  @TICK,R0
        MOV  @TICK,R1
        CI   R1,800
        JHE  TOPFR1
-       CI   R1,250
+       CI   R1,>C0
        JNE  TOPFR5
 *      Change colors
        LI   R0,COLRTB
-       LI   R1,>6F00
+       LI   R1,>F700
        LI   R2,16
        BL   @VDPWR
        JMP  TOPFR4
-TOPFR5 CI   R1,500
+TOPFR5 CI   R1,>1C0
+       JNE  TOPFR6
+       LI   R0,COLRTB
+       LI   R1,>7D00
+       LI   R2,16
+       BL   @VDPWR
+TOPFR6 CI   R1,>2C0
        JNE  TOPFR4
        LI   R0,COLRTB
        LI   R1,>DF00
@@ -134,17 +140,30 @@ TOPFR5 CI   R1,500
        BL   @VDPWR
 *      Update parameters
 *      XSIZE and YSIZE are sine curves with slightly different phases
-TOPFR4 MOV  @TICK,R1
-       BL   @SIN
-       SRA  R1,2
-       AI   R1,12+64
-       MOV  R1,@XSIZE
+TOPFR4 MOV  @TICK,R1                   ; 0 - 856
+       BL   @SIN                       ; -256 - 256
+       AI   R1,>100                    ; 0 - 512
+       SRL  R1,2                       ; 0 - 128
+       MOV  @TICK,R2                   ; 0 - 856
+       SRA  R2,1                       ; 0 - 428
+       AI   R2,80                      ; 100 - 508
+       MPY  R2,R1                      ; 0 - 65024
+       SRL  R2,8                       ; 0 - 254
+       AI   R2,8                       ; 8 - 262
+       MOV  R2,@XSIZE
+*      YSIZE
        MOV  @TICK,R1
        AI   R1,16
        BL   @SIN
-       SRA  R1,2
-       AI   R1,12+64
-       MOV  R1,@YSIZE
+       AI   R1,>100
+       SRL  R1,2
+       MOV  @TICK,R2
+       SRA  R2,1
+       AI   R2,100
+       MPY  R2,R1
+       SRL  R2,8
+       AI   R2,8
+       MOV  R2,@YSIZE
 *      Move origin X0,Y0 in a circle
        MOV  @TICK,R1
        BL   @SIN
