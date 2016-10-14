@@ -71,11 +71,7 @@ BSPEED EQU  >0001
 
 TOPINI LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
-;*      Load map
-;       LI   R0,>000D                   ; Bank / file index in R0
-;       LI   R1,COL0                    ; Destination in R1
-;       LI   R2,>187A                   ; Number of bytes to copy in R2
-;       BL   @LDTORAM
+       BL   @F18ADT
 *      Decode map
 *      (not only map but also characters, so actual map ends in MD0)
        LI   R0,COL0
@@ -209,7 +205,11 @@ MAIN2  MOV  R0,@BARPOS
        MOV  @TICK,R1
        CI   R1,2800
        JL   RETURN
-       SETO R0
+       ABS  @F18A
+       JEQ  MAIN3
+       LI   R0,>3280                   ; Reset F18A
+       BL   @VWTR
+MAIN3  SETO R0
 *      Return
 RETURN DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
@@ -933,6 +933,39 @@ RLEDC4 DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
        B    *R11
 *// RLEDC
+
+********************************************************************************
+*
+* F18A detection
+*
+F18ADT MOV  R11,*R10+                  ; Push return address onto the stack
+*      F18A  Unlock
+       LI   R0,>391C                   ; VR1/57, value 00011100
+       BL   @VWTR                      ; Write once
+       BL   @VWTR                      ; Write twice, unlock
+*      Check the version status reg
+       MOV  @VDPSTA,R0                 ; Clear status
+       LI   R0,>0F01                   ; Set to read reg 1, Identity
+       BL   @VWTR
+       MOVB @VDPSTA,R0
+       ANDI R0,>F000
+       CI   R0,>E000
+       JNE  F18AD1
+       SETO @F18A
+       LI   R0,>0F00                   ; Set to read reg 0
+       BL   @VWTR
+	   LI	R0,>1E04			       ; Set number of displayable sprites to 4
+	   BL   @VWTR				       ; Write reg >1E
+       JMP  F18AD2
+F18AD1 CLR  @F18A
+       LI   R0,>01E0                   ; Set Reg 1 to a sane value
+       BL   @VWTR                      ; Write
+*      Return
+F18AD2 DECT R10                        ; Pop return address off the stack
+       MOV  *R10,R11
+       B    *R11
+F18A   DATA >0000
+*// F18ADT
 
 ********************************************************************************
 *
