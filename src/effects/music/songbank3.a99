@@ -12,7 +12,7 @@
        
 * Array of pointers to songs in case we want to store multiple songs in
 * one bank.       
-       DATA HAUS7
+       DATA HOUSE
 
-HAUS7  BCOPY "../../data/haus7.vgm.spf"
+HOUSE  BCOPY "../../data/ti99house.vgm.spf"
        END
