@@ -12,9 +12,9 @@
        
 * Array of pointers to songs in case we want to store multiple songs in
 * one bank.       
-       DATA CHAOS
-;       DATA RAEL
+       DATA DIAGS
+;       DATA CHAOS
 
-CHAOS  BCOPY "../../data/collision_chaos.vgm.spf"
-;RAEL   BCOPY "../../data/rael_v2_spf30hz.vgm"
-       END
+DIAGS  BCOPY "../../data/dya-diagonals-1.vgm.spf"
+;CHAOS  BCOPY "../../data/collision_chaos.vgm.spf"
+      END
