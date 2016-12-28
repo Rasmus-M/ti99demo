@@ -66,7 +66,8 @@ TOPINI LI   R10,STACK
 *
 TOPFRM LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
-       MOV  @TICK,R6
+*       MOV  @TICK,R6
+       CLR  R6
        ANDI R6,7
        JNE  LOOP0
        LI   R0,-8
@@ -80,6 +81,14 @@ LOOP1  MOV  R8,R1
        SLA  R1,1
        MOV  @SINTBL(R1),R1
        SRA  R1,3
+
+;       MOV  @TICK,R2
+;       ANDI R2,>00FF                   ; Wrap
+;       MOV  @SINTBL(R2),R2
+;       MPY  R2,R1
+;       SRA  R2,8
+;       MOV  R2,R1
+
 *      Name table
        MOV  R1,R0
        ANDI R0,>0007
@@ -109,7 +118,8 @@ LOOP1  MOV  R8,R1
 *      Screen loop
        JMP  LOOP1
 *      Frame loop
-LOOP2  INCT @PHASE
+LOOP2
+*      INCT @PHASE
        INCT @PHASE
        INC  @TICK
        CLR  R0
