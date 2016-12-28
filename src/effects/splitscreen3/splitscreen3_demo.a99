@@ -66,29 +66,16 @@ TOPINI LI   R10,STACK
 *
 TOPFRM LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
-*       MOV  @TICK,R6
        CLR  R6
-       ANDI R6,7
-       JNE  LOOP0
-       LI   R0,-8
-       A    R0,@PHASE
 LOOP0  MOV  @PHASE,R8
        LI   R9,VDPWA
        LI   R14,>8200                  ; For setting reg 2
        LI   R15,>8300                  ; For setting reg 3
 LOOP1  MOV  R8,R1
        ANDI R1,>00FF                   ; Wrap
-       SLA  R1,1
+       SLA  R1,1                       ; To word offset
        MOV  @SINTBL(R1),R1
        SRA  R1,3
-
-;       MOV  @TICK,R2
-;       ANDI R2,>00FF                   ; Wrap
-;       MOV  @SINTBL(R2),R2
-;       MPY  R2,R1
-;       SRA  R2,8
-;       MOV  R2,R1
-
 *      Name table
        MOV  R1,R0
        ANDI R0,>0007
@@ -118,9 +105,11 @@ LOOP1  MOV  R8,R1
 *      Screen loop
        JMP  LOOP1
 *      Frame loop
-LOOP2
-*      INCT @PHASE
-       INCT @PHASE
+LOOP2  MOV  @TICK,R1
+       ANDI R1,>01FE
+       MOV  @SINTBL(R1),R1
+       SRA  R1,5
+       A    R1,@PHASE
        INC  @TICK
        CLR  R0
        MOV  @TICK,R1
