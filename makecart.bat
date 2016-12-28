@@ -7,7 +7,7 @@ python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo4 --base 0x6000 
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo5 --base 0x6000 .\src\effects\music\songbank1.a99 
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo6 --base 0x6000 .\src\effects\raycaster\raycaster.a99 
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo7 --base 0x6000 .\src\effects\raycaster\casterdata.a99
-python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo8 --base 0x6000 .\src\effects\empty\empty.a99
+python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo8 --base 0x6000 .\src\effects\music\songbank4.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo9 --base 0x6000 .\src\effects\metaballs\metaballs.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo10 --base 0x6000 .\src\effects\ball\ball_demo.a99
 python tools\xdt99\xas99.py -b -R -D CARTRIDGE -o .\src\bin\demo11 --base 0x6000 .\src\effects\ball\ball-mask-shadow_demo.a99

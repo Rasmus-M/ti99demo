@@ -9,7 +9,7 @@ python tools\xdt99\xas99.py -b -R -o .\src\bin\demo4 .\src\effects\music\songban
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo5 .\src\effects\music\songbank1.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo6 .\src\effects\raycaster\raycaster.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo7 .\src\effects\raycaster\casterdata.a99
-python tools\xdt99\xas99.py -b -R -o .\src\bin\demo8 .\src\effects\empty\empty.a99
+python tools\xdt99\xas99.py -b -R -o .\src\bin\demo8 .\src\effects\music\songbank4.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo9 .\src\effects\metaballs\metaballs.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo10 .\src\effects\ball\ball_demo.a99
 python tools\xdt99\xas99.py -b -R -o .\src\bin\demo11 .\src\effects\ball\ball-mask-shadow_demo.a99

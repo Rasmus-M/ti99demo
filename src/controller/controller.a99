@@ -1467,9 +1467,9 @@ SCNLST
        DATA >001C, >0500  ; Bank 28: Title - Don't mess with Texas     Mode 2
        DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
        DATA >0019, >0500  ; Bank 25: Spinning box animation (decoder)  Mode 2 hybrid
-       DATA >0016, >0500  ; Bank 22: Infinite dots                     Mode 1
+       DATA >0016, >0800  ; Bank 22: Infinite dots                     Mode 1
        DATA >0015, >0500  ; Bank 21: Multicolor rotozoom               Mode 3
-       DATA >0011, >0500  ; Bank 17: Infinite bobs                     Mode 2
+       DATA >0011, >0800  ; Bank 17: Infinite bobs                     Mode 2
        DATA >000A, >0400  ; Bank 10: Boing ball                        Mode 2 hybrid
        DATA >0010, >0400  ; Bank 16: Checkerboard zoom                 Mode 1
        DATA >000E, >0400  ; Bank 14: Multiplane                        Mode 1
@@ -1479,7 +1479,7 @@ SCNLST
        DATA >0001, >0400  ; Bank 1: Ms Texas                           Mode 2/3 flicker
        DATA >000C, >0500  ; Bank 12: Twister and scroller              Mode 2 hybrid
        DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
-       DATA >0017, >0500  ; Bank 23: Multisplit                        Mode 1/2/3
+       DATA >0017, >0800  ; Bank 23: Multisplit                        Mode 1/2/3
        DATA >0013, >0500  ; Bank 19: Splitscreen 3D scroller           Mode 1
        DATA >001D, >1E00  ; Bank 29: Credits scroller                  Mode 1
        DATA >0022, >0000  ; Bank 34: final splash                      Mode 1

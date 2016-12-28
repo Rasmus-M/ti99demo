@@ -1,6 +1,6 @@
 *********************************************************************
 * Filename: songbank1.a99
-* Bank:     5
+* Bank:     8
 * Date:     05/01/2016
 * Author:   orbitaldecay
 * 
@@ -12,7 +12,8 @@
        
 * Array of pointers to songs in case we want to store multiple songs in
 * one bank.       
-       DATA DIAG1
+       DATA DIAG2
+;       DATA CHAOS
 
-DIAG1  BCOPY "../../data/dya-diagonals-1.vgm.spf"
+DIAG2 BCOPY "../../data/dya-diagonals-2.vgm.spf"
       END
