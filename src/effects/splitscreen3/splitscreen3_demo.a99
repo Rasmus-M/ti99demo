@@ -66,7 +66,11 @@ TOPINI LI   R10,STACK
 *
 TOPFRM LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
-       CLR  R6
+       MOV  @TICK,R6
+       ANDI R6,7
+       JNE  LOOP0
+       LI   R0,-8
+       A    R0,@PHASE
 LOOP0  MOV  @PHASE,R8
        LI   R9,VDPWA
        LI   R14,>8200                  ; For setting reg 2
@@ -106,6 +110,7 @@ LOOP1  MOV  R8,R1
        JMP  LOOP1
 *      Frame loop
 LOOP2  MOV  @TICK,R1
+       SRL  R1,1
        ANDI R1,>01FE
        MOV  @SINTBL(R1),R1
        SRA  R1,5
@@ -113,7 +118,7 @@ LOOP2  MOV  @TICK,R1
        INC  @TICK
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,700
+       CI   R1,1024
        JL   RETURN
        SETO R0
 *      Return
