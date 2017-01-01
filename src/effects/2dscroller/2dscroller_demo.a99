@@ -49,7 +49,7 @@ COLLP  EQU  SPRMRG+2                   ; Column loop
 CPYLP  EQU  COLLP+>4E                  ; Copy loop
 PADMAX EQU  CPYLP+>22
 
-RUNFRM EQU  3000
+RUNFRM EQU  1608                       ; Must be divisible by 8
 
 ********************************************************************************
 *
@@ -843,7 +843,7 @@ VDPW7  DATA >0007
 *
 * Variables and Data
 *
-TXT    TEXT '    WELCOME TO THE TI-99/4A MEGADEMO        '
+TXT    TEXT '   TI-99/4A MEGADEMO            '
        BYTE 0
        EVEN
 

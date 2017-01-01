@@ -115,8 +115,10 @@ FRAME  LI   R10,STACK
 RETURN DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11
        B    *R11
-JMPTBL DATA DRAW4,MOVE,DRAW2,MOVE
-       DATA DRAW3,MOVE,DRAW1,MOVE
+JMPTBL DATA DRAW4,MOVE
+       DATA DRAW2,MOVE
+       DATA DRAW3,MOVE
+;       DATA DRAW1,MOVE
        DATA DRAW5,MOVE
 *// FRAME
 
@@ -474,11 +476,11 @@ MOVE   MOV  R11,*R10+                  ; Push return address onto the stack
 *      Next
 MOVE1  INC  @TICK
        MOV  @TICK,R0
-       CI   R0,400
+       CI   R0,332
        JNE  MOVE2
        INC  @STATE
        MOV  @STATE,R0
-       CI   R0,10
+       CI   R0,8
        JLT  MOVE2
        SETO @STATE
 *      Return
