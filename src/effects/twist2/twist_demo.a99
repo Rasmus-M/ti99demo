@@ -203,7 +203,7 @@ MAIN2  MOV  R0,@BARPOS
        INC  @TICK
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,2800
+       CI   R1,1800
        JL   RETURN
        ABS  @F18A
        JEQ  MAIN3
@@ -958,7 +958,7 @@ F18ADT MOV  R11,*R10+                  ; Push return address onto the stack
 	   BL   @VWTR				       ; Write reg >1E
        JMP  F18AD2
 F18AD1 CLR  @F18A
-       LI   R0,>01E0                   ; Set Reg 1 to a sane value
+       LI   R0,>01A2                   ; Set Reg 1 to a sane value
        BL   @VWTR                      ; Write
 *      Return
 F18AD2 DECT R10                        ; Pop return address off the stack
@@ -985,8 +985,7 @@ SPRSIZ EQU  16
 SPRDAT BSS  NSPR*SPRSIZ
 SPREND
 
-SCRLTX TEXT "WE CONTINUE WITH SCANLINE EFFECTS THAT "
-       TEXT "MIGHT NOT WORK IN ALL EMULATORS.....             "
+SCRLTX TEXT "WE CONTINUE WITH SOME SCANLINE EFFECTS.....             "
        BYTE 0
 
        EVEN

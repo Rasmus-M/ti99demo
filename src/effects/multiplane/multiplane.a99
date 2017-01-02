@@ -419,7 +419,7 @@ DRAW
         
         LWPI CTRLWP
         MOV  @SAVR3, R3
-        CI   R3, 1885
+        CI   R3, 2060
         JGT  BAIL
         CLR  R0
         JMP  RETURN

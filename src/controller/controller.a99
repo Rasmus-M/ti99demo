@@ -1468,19 +1468,19 @@ SCNLST
        DATA >000F, >0500  ; Bank 15: Sine scroller                     Mode 1
        DATA >0019, >0800  ; Bank 25: Spinning box animation (decoder)  Mode 2 hybrid
        DATA >0016, >0800  ; Bank 22: Infinite dots                     Mode 1
-       DATA >0015, >0500  ; Bank 21: Multicolor rotozoom               Mode 3
-       DATA >0011, >0800  ; Bank 17: Infinite bobs                     Mode 2
+       DATA >0015, >0400  ; Bank 21: Multicolor rotozoom               Mode 3
+       DATA >0011, >0400  ; Bank 17: Infinite bobs                     Mode 2
        DATA >000A, >0400  ; Bank 10: Boing ball                        Mode 2 hybrid
-       DATA >0010, >0400  ; Bank 16: Checkerboard zoom                 Mode 1
        DATA >000E, >0400  ; Bank 14: Multiplane                        Mode 1
-       DATA >0009, >0400  ; Bank 9: Metaballs                          Mode 1
-       DATA >0006, >0400  ; Bank 6: Raycaster                          Mode 2
-       DATA >0003, >0400  ; Bank 3: Dot fx                             Mode 2 hybrid
-       DATA >0001, >0400  ; Bank 1: Ms Texas                           Mode 2/3 flicker
-       DATA >000C, >0500  ; Bank 12: Twister and scroller              Mode 2 hybrid
-       DATA >0012, >0500  ; Bank 18: Sine wave splitscreen             Mode 1
-       DATA >0017, >0800  ; Bank 23: Multisplit                        Mode 1/2/3
-       DATA >0013, >0500  ; Bank 19: Splitscreen 3D scroller           Mode 1
+       DATA >0006, >0500  ; Bank 6: Raycaster                          Mode 2
+       DATA >0009, >0500  ; Bank 9: Metaballs                          Mode 1
+       DATA >0003, >0800  ; Bank 3: Dot fx                             Mode 2 hybrid
+       DATA >0001, >0800  ; Bank 1: Ms Texas                           Mode 2/3 flicker
+       DATA >0010, >0400  ; Bank 16: Checkerboard zoom                 Mode 1
+       DATA >000C, >0400  ; Bank 12: Twister and scroller              Mode 2 hybrid
+       DATA >0012, >0400  ; Bank 18: Sine wave splitscreen             Mode 1
+       DATA >0017, >0400  ; Bank 23: Multisplit                        Mode 1/2/3
+       DATA >0013, >0400  ; Bank 19: Splitscreen 3D scroller           Mode 1
        DATA >001D, >1E00  ; Bank 29: Credits scroller                  Mode 1
        DATA >0022, >0000  ; Bank 34: final splash                      Mode 1
        DATA >0000, >0000  ; Zero signifies reboot

@@ -116,7 +116,7 @@ LOOP1  MOV  @TICK,R0
        BL   @VWTR
 *      Frame or outro?
        MOV  @TICK,R1
-       CI   R1,800
+       CI   R1,>250
        JHE  TOPFR1
        CI   R1,>C0
        JNE  TOPFR5
@@ -198,7 +198,7 @@ TOPFR2 INC  @TICK
 *      Check for finish
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,856
+       CI   R1,>250+56
        JL   RETURN
        SETO R0
 *      Return
@@ -361,6 +361,11 @@ OUTINI MOV  R11,*R10+                  ; Push return address onto the stack
        LI   R1,NTBUF
        LI   R2,>300
        BL   @VDPRE
+*      Clear character >FF
+       LI   R0,>FF*8+PTRNTB
+       CLR  R1
+       LI   R2,8
+       BL   @VDPWR
 *      Return
        DECT R10                        ; Pop return address off the stack
        MOV  *R10,R11

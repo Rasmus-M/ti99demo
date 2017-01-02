@@ -155,7 +155,7 @@ LABEL2 INC  @TICK
 *      Check for finish
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,500
+       CI   R1,580
        JL   RETURN
        SETO R0
 *      Return
