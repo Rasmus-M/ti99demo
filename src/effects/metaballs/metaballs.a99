@@ -253,7 +253,7 @@ FRAME
 
 * Bail after 1200 ticks (20 seconds)
         LWPI CTRLWP
-        CI   R3, 1200
+        CI   R3, 1190
         JGT  BAIL
         CLR  R0
         JMP  RETURN
