@@ -45,7 +45,7 @@ FRAME  MOV  R11,@FRMRET
 *      Measure time to finish
        CLR  R0                         ; Signal not done
        MOV  @TICK,R3
-       CI   R3,636
+       CI   R3,620
        JL   RETURN
        BL   @OUTRO
        SETO R0                         ; Signal done
