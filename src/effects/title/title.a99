@@ -29,6 +29,8 @@ SPSTAT EQU  SPCNTR+2                   ; Speech status byte
 SPREAD EQU  SPSTAT+2                   ; Status read routine
 CPLP   EQU  SPREAD+16
 
+RUNFRM EQU  876
+
 ********************************************************************************
 *
 * Main program
@@ -159,10 +161,10 @@ JUSPOR NEG  R1
        BL   @POUR
        JMP  FRAME1
        
-FRAME0 CI   R1,1000
+FRAME0 CI   R1,RUNFRM
        JL   FRAME2
 *      Scroll out effect
-       AI   R1,-1000
+       AI   R1,-RUNFRM
        BL   @SCROLL
 *      Main loop
 FRAME2 MOV  @TICK,R2
@@ -223,7 +225,7 @@ FRAME3 ABS  @SPOK                      ; Check for speech synth
 FRAME1 INC  @TICK
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,1032
+       CI   R1,RUNFRM+32
        JL   RETURN
        SETO R0
 *      Return

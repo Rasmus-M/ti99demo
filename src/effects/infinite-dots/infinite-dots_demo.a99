@@ -476,7 +476,7 @@ MOVE   MOV  R11,*R10+                  ; Push return address onto the stack
 *      Next
 MOVE1  INC  @TICK
        MOV  @TICK,R0
-       CI   R0,332
+       CI   R0,300
        JNE  MOVE2
        INC  @STATE
        MOV  @STATE,R0
