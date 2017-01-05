@@ -57,6 +57,7 @@ INIT   LI   R10,STACK
        MOV  R11,*R10+                  ; Push return address onto the stack
        BL   @GMODE
        BL   @INIPAT
+       CLR  @ATTEN
 *      Screen on
        LI   R0,>01E2
        BL   @VWTR

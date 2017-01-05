@@ -40,6 +40,7 @@ HEIGHT EQU  176
 LASTCT EQU  >0050+HEIGHT-1
 NROWS  EQU  16
 NSPR   EQU  6
+RUNFRM EQU  2*8*HEIGHT                 ; 2 runs * 8 frames/row * 176 rows/run = 2816 frames
 
 ********************************************************************************
 *
@@ -89,9 +90,9 @@ TOPFRM LI   R10,STACK
        LI   R0,>0100                   ; Start velocity
        MOV  R0,@ROWVY(R6)              ; Set start velocity
        MOV  @TICK,R0
-       CI   R0,2816
+       CI   R0,RUNFRM-300
        JHE  LOOP6
-       MOV  @NXTCOL,R0                 ; Next color table number
+LOOP7  MOV  @NXTCOL,R0                 ; Next color table number
        MOV  R0,@ROWCLR(R6)             ; Set color table number
        DEC  R0                         ; Previous color table
        CI   R0,>0050                   ; Check for first table
@@ -106,7 +107,14 @@ LOOP1  MOV  R0,@NXTCOL                 ; Save next color table
 LOOP2  MOV  R6,@NXTROW                 ; Save next available row
        JMP  LOOP3
 *      End rows
-LOOP6  LI   R0,>0050
+LOOP6  MOV  R0,R1
+       AI   R1,-RUNFRM+300
+       SRL  R1,5
+       INC  R1
+       MOVB @R1LB,@ATTEN
+       CI   R0,RUNFRM
+       JLT  LOOP7
+       LI   R0,>0050
        MOV  R0,@ROWCLR(R6)
 *      Row loop
 LOOP3  MOV  @TOPROW,R6                 ; Pointer to row structure
@@ -139,7 +147,7 @@ LOOP5  BL   @UPDSPR
        INC  @TICK                      ; Next frame
        CLR  R0
        MOV  @TICK,R1
-       CI   R1,2*8*HEIGHT+100          ; 2 runs * 8 frames/row * 176 rows/run = 2816 frames
+       CI   R1,RUNFRM+100              ; RUNFRM + 100 = 2916 frames
        JL   RETURN
        SETO R0
 *      Return
