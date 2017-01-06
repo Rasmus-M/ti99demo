@@ -49,7 +49,7 @@ COLLP  EQU  SPRMRG+2                   ; Column loop
 CPYLP  EQU  COLLP+>4E                  ; Copy loop
 PADMAX EQU  CPYLP+>22
 
-RUNFRM EQU  1568                       ; Must be divisible by 8
+RUNFRM EQU  1552                       ; Must be divisible by 8
 
 ********************************************************************************
 *
