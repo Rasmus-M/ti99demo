@@ -155,60 +155,60 @@ QUIT   CLR  @>83C4          ; Reset user ISR address
        BLWP @>0000          ; Reboot
 *// ISR
 
-*********************************************************************
-*
-* Draw 1
-*
-DRAW1  MOV  R11,*R10+                  ; Push return address onto the stack
-*      Initialize the Color Table
-       LI   R1,>B4B6
-       BL   @SETCLR
-*      Select empty pattern table
-       LI   R0,>0406
-       BL   @VWTR
-*      Initialize the Pattern Tables
-       LI   R0,PTRNTB
-       LI   R2,>2000
-       BL   @VCLR
-*      Select first pattern table
-       LI   R0,>0400
-       BL   @VWTR
-*      Draw dots
-       CLR  @TICK
-*      X
-DRAW11 MOV  @TICK,R1
-       SLA  R1,4
-       BL   @SIN
-       MOV  @TICK,R2
-       SRA  R2,6
-       MPY  R2,R1
-       SRA  R2,9
-       MOV  R2,@X
-*      Y
-       MOV  @TICK,R1
-       SLA  R1,4
-       BL   @COS
-       MOV  @TICK,R2
-       SRA  R2,6
-       MPY  R2,R1
-       SRA  R2,9
-       MOV  R2,@Y
-*      Draw dot
-       BL   @DOT
-*      Move sprites
-       BL   @ISR
-*      Next dot
-       INC  @TICK
-       MOV  @TICK,R0
-       CI   R0,1024
-       JLT  DRAW11
-       INC  @STATE
-       CLR  @TICK
-*      Return
-       DECT R10                        ; Pop return address off the stack
-       MOV  *R10,R11
-       B    *R11
-*// DRAW1
+;*********************************************************************
+;*
+;* Draw 1
+;*
+;DRAW1  MOV  R11,*R10+                  ; Push return address onto the stack
+;*      Initialize the Color Table
+;       LI   R1,>B4B6
+;       BL   @SETCLR
+;*      Select empty pattern table
+;       LI   R0,>0406
+;       BL   @VWTR
+;*      Initialize the Pattern Tables
+;       LI   R0,PTRNTB
+;       LI   R2,>2000
+;       BL   @VCLR
+;*      Select first pattern table
+;       LI   R0,>0400
+;       BL   @VWTR
+;*      Draw dots
+;       CLR  @TICK
+;*      X
+;DRAW11 MOV  @TICK,R1
+;       SLA  R1,4
+;       BL   @SIN
+;       MOV  @TICK,R2
+;       SRA  R2,6
+;       MPY  R2,R1
+;       SRA  R2,9
+;       MOV  R2,@X
+;*      Y
+;       MOV  @TICK,R1
+;       SLA  R1,4
+;       BL   @COS
+;       MOV  @TICK,R2
+;       SRA  R2,6
+;       MPY  R2,R1
+;       SRA  R2,9
+;       MOV  R2,@Y
+;*      Draw dot
+;       BL   @DOT
+;*      Move sprites
+;       BL   @ISR
+;*      Next dot
+;       INC  @TICK
+;       MOV  @TICK,R0
+;       CI   R0,1024
+;       JLT  DRAW11
+;       INC  @STATE
+;       CLR  @TICK
+;*      Return
+;       DECT R10                        ; Pop return address off the stack
+;       MOV  *R10,R11
+;       B    *R11
+;*// DRAW1
 
 *********************************************************************
 *

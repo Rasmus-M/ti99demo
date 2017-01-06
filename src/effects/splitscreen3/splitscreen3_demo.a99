@@ -267,20 +267,20 @@ SIN    ANDI R1,>00FF                   ; Wrap
        B    *R11
 *// SIN
 
-*********************************************************************
-*
-* Calculate cosine
-*
-* R1: Angle in units of 1/256 of a circle
-*
-* On return R1 contains the cosine value in FP 8.8 format
-*
-COS    AI   R1,64                      ; cos(a) = sin(a + 90 degrees or 64 units)
-       ANDI R1,>00FF                   ; Wrap
-       SLA  R1,1
-       MOV  @SINTBL(R1),R1
-       B    *R11
-*// COS
+;*********************************************************************
+;*
+;* Calculate cosine
+;*
+;* R1: Angle in units of 1/256 of a circle
+;*
+;* On return R1 contains the cosine value in FP 8.8 format
+;*
+;COS    AI   R1,64                      ; cos(a) = sin(a + 90 degrees or 64 units)
+;       ANDI R1,>00FF                   ; Wrap
+;       SLA  R1,1
+;       MOV  @SINTBL(R1),R1
+;       B    *R11
+;*// COS
 
 *********************************************************************
 *
