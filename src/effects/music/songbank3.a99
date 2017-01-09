@@ -14,5 +14,5 @@
 * one bank.       
        DATA HOUSE
 
-HOUSE  BCOPY "../../data/ti99house.vgm.spf"
+HOUSE  BCOPY "../../data/ti99hous_upd0B.vgm.spf"
        END
