@@ -419,9 +419,17 @@ DRAW
         
         LWPI CTRLWP
         MOV  @SAVR3, R3
+
+        CI   R3,1800
+        JLT  NOBAIL
+        MOV  R3,R1
+        AI   R1,-1800
+        SRL  R1,4
+        MOVB @CTRLWP+3,@ATTEN
+
         CI   R3, 2000
         JGT  BAIL
-        CLR  R0
+NOBAIL  CLR  R0
         JMP  RETURN
 BAIL
         SETO R0
