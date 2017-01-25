@@ -90,3 +90,5 @@ python tools\xdt99\xas99.py -i -R -D SAMS,PACKDISK -L controller.lst -o .\src\bi
 python tools\xdt99\xdm99.py demo.dsk -a ^
     .\src\bin\samsdemo ^
     -n SAMSDEMO
+
+python tools\xdt99\xdm99.py demo.dsk -9 -a .\src\loader\LOAD
