@@ -1165,6 +1165,21 @@ SKIPFX
        CI   R4,>0000        ; If next effect is zero, then bail
        JNE  LOOP
        
+* This block added by Tursi for the public release and is not
+* in the official presentation for the demo (to avoid accidents!)
+* If Alpha Lock is UP (instead of the normal down), then loop instead
+* of resettings. This allows easy use at shows. Code from TI ROM.
+       CLR  R12
+       SBZ  >15     * activate Alpha Lock
+       SRC  R12,14  * delay
+       TB   >0007   * test return - equal is released
+       SBO  >15     * deactivate
+       JNE  QUIT    * if pressed, quit
+
+* going to loop then
+       LI   R6,SCNLST       ; reset Scene list pointer       
+       JMP  LOOP
+       
 QUIT   CLR  @>83C4          ; Reset user ISR address
        BLWP @>0000          ; Reboot
        
