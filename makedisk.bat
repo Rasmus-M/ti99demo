@@ -41,11 +41,13 @@ python tools\xdt99\xas99.py -b -R -o .\src\bin\demo34 .\src\effects\splash\final
 rem Create disk
 rem The order these appear in this list determines the bank index, so always add
 rem to the end of the list!
-if exist demo.dsk (del demo.dsk)
+if exist demo-dsdd.dsk (del demo-dsdd.dsk)
+
 rem For now we're using a 360K image until we have reclaimed some more space
-rem python tools\xdt99\xdm99.py demo.dsk --initialize 1440 -n DEMO
-python tools\xdt99\xdm99.py demo.dsk --initialize 720 -n DEMO
-python tools\xdt99\xdm99.py demo.dsk -a ^
+python tools\xdt99\xdm99.py demo-dsdd.dsk --initialize DSDD -n DEMO
+rem python tools\xdt99\xdm99.py demo.dsk --initialize 720 -n DEMO
+
+python tools\xdt99\xdm99.py demo-dsdd.dsk -a ^
     .\src\bin\demo0 ^
     .\src\bin\demo1_0000 ^
     .\src\bin\demo2_0000 ^
@@ -84,3 +86,5 @@ python tools\xdt99\xdm99.py demo.dsk -a ^
     -n DEMOA
 
 call makesams.bat
+
+python tools\xdt99\xdm99.py demo-dsdd.dsk -9 -a .\src\loader\LOAD
