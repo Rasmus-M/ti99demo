@@ -23,7 +23,7 @@ import sys
 import re
 import os.path
 
-VERSION = "1.5.3"
+VERSION = "1.6.0"
 
 
 ### Utility functions
@@ -155,10 +155,10 @@ class Symbols:
             "GRMWD": 0x9C00, "GRMWA": 0x9C02
             }
         for d in addDefs or []:
-				    for x in d.split(","):
-						    parts = x.upper().split("=")
-						    val = Parser.symconst(parts[1]) if len(parts) > 1 else 1
-						    self.symbols[parts[0]] = val
+            for g in d.upper().split(","):
+                parts = g.split("=")
+                val = Parser.symconst(parts[1]) if len(parts) > 1 else 1
+                self.symbols[parts[0]] = val
         self.refdefs = []
         self.xops = {}
         self.idt = "        "
@@ -1033,6 +1033,10 @@ class Preprocessor:
     def ENDIF(self, code, ops):
         self.parse = self.parseBranches.pop()
 
+    def ERROR(self, code, ops):
+        if self.parse:
+            raise AsmError("Error state")
+
     def instmargs(self, text):
         try:
             return re.sub(r"#(\d+)",
@@ -1774,6 +1778,7 @@ def main():
     # assembly
     target = ("image" if opts.image else
               "cart" if opts.cart else
+              "bin" if opts.bin else
               "xb" if opts.embed else
               "js" if opts.jstart else
               "obj")

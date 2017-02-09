@@ -24,7 +24,7 @@ import re
 import datetime
 import os.path
 
-VERSION = "1.5.3"
+VERSION = "1.6.0"
 
 
 ### Utility functions
@@ -78,10 +78,10 @@ def writedata(n, d, m="wb"):
             f.write(d)
 
 
-def readdata(n, m="r"):
-    """read data from file or STDIN"""
+def readdata(n, m="r", d=None):
+    """read data from file or STDIN (or return supplied data)"""
     if n == "-":
-        return sys.stdin.read()
+        return d or sys.stdin.read()
     else:
         with open(n, m) as f:
             return f.read()
@@ -110,6 +110,8 @@ class Disk:
         self.warnings = {}
         # meta data
         sector0 = self.getSector(0)
+        if sector0[0] == "\x00" and sector0[21:23] == "\x00\xfe":
+            raise DiskError("Track dump images not supported")
         self.name = sector0[:0x0A]
         self.totalSectors = ordw(sector0[0x0A:0x0C])
         self.sectorsPerTrack = ord(sector0[0x0C])
@@ -268,7 +270,7 @@ class Disk:
 
     def getSector(self, n, context=None):
         """retrieve sector from image"""
-        if n > 0 and n > self.totalSectors:
+        if n > 0 and n >= self.totalSectors:
             raise IndexError("Invalid sector number")
         if context:
             self.readSectors.append((n, context))
@@ -352,8 +354,8 @@ class Disk:
             raise DiskError("Disk size must be multiple of 8 sectors")
         oldsize, self.totalSectors, self.usedSectors = self.totalSectors, newsize, 0
         self.rebuildDisk()
-        self.image = (self.image[:0x0A] + chrw(newsize) +
-                      self.image[0x0C:newsize * self.bytesPerSector] +
+        self.image = (self.image[:0x0a] + chrw(newsize) +
+                      self.image[0x0c:newsize * self.bytesPerSector] +
                       self.blankByte * ((newsize - oldsize) *
                                         self.bytesPerSector))
 
@@ -361,12 +363,12 @@ class Disk:
         """override geometry of disk image"""
         self.sides = sides or self.sides
         self.density = density or self.density
+        self.sectorsPerTrack = Disk.defaultSectorsPerTrack * self.density
         self.tracksPerSide = tracks or self.tracksPerSide
-	self.sectorsPerTrack = self.density * 9
         self.image = (
-	    self.image[:0x0C] +
-	    chr(self.density * 9) +
-            self.image[0x0D:0x11] +
+            self.image[:0x0c] +
+            chr(self.sectorsPerTrack) +
+            self.image[0x0d:0x11] +
             "%c%c%c" % (chr(self.tracksPerSide), chr(self.sides),
                         chr(self.density)) +
             self.image[0x14:]
@@ -397,11 +399,11 @@ class Disk:
 
     def getInfo(self):
         """return information about disk image"""
-        return "%10s: %c   %d used  %d free   %d KB  %dS/%dD  %2d TpS\n" % (
+        return "%10s: %c   %d used  %d free   %d KB  %dS/%dD %dT  %d S/T\n" % (
             self.name, self.protected,
             self.usedSectors, self.totalSectors - self.usedSectors,
             self.totalSectors * Disk.bytesPerSector / 1024,
-            self.sides, self.density, self.tracksPerSide)
+            self.sides, self.density, self.tracksPerSide, self.sectorsPerTrack)
 
     def getCatalog(self):
         """return formatted disk catalog"""
@@ -420,7 +422,7 @@ class Disk:
             not (sides and density)):
             raise DiskError("Invalid disk size")
         sector0 = "%-10s%2s%cDSK %c%c%c" % (
-            name, chrw(size), Disk.defaultSectorsPerTrack,
+            name, chrw(size), Disk.defaultSectorsPerTrack * density,
             tracks or Disk.defaultTracks, sides, density) + "\x00" * 0x24 + (
             "\x03" + "\x00" * (size / 8 - 1)) + (
             "\xff" * (Disk.bytesPerSector - size / 8 - 0x38))
@@ -455,8 +457,8 @@ class Disk:
         except (IndexError, ValueError):
             raise DiskError("Invalid disk geometry " + geometry)
         try:
-            size = (sides * density * (tracks or Disk.defaultTracks) *
-                    Disk.defaultSectorsPerTrack)
+            size = (sides * (tracks or Disk.defaultTracks) *
+                    Disk.defaultSectorsPerTrack * density)
         except TypeError:
             size = None
         return size, (sides, density, tracks)
@@ -491,11 +493,12 @@ class FileError(Exception):
 class FileDescriptor:
     """file meta data descriptor based on TI disk image format"""
 
-    def __init__(self, name=None, fmt=None, sector=None, header=None):
+    def __init__(self, name=None, fmt=None, sector=None, header=None, hostfn=None):
+        self.error = False
         if sector:
             self.initSector(sector)
         elif header:
-            self.initHeader(header)
+            self.initHeader(header, hostfn)
         elif name and fmt:
             self.init(name, fmt)
         else:
@@ -512,7 +515,6 @@ class FileDescriptor:
         self.size = (self.totalSectors * Disk.bytesPerSector -
                      pad(self.eofOffset, Disk.bytesPerSector))  # excludes FDR
         self.actualRecords = -1
-        self.error = False
 
     def init(self, name, fmt):
         """create new empty file"""
@@ -538,11 +540,8 @@ class FileDescriptor:
                 self.recordsPerSector = ((Disk.bytesPerSector - 2) /
                                          self.recordLen)
         self.totalSectors = self.eofOffset = self.totalLv3Records = 0
-        now = datetime.datetime.now()
-        self.createdDate = self.modifiedDate = (
-            (now.year % 100) << 9 | now.month << 5 | now.day)
-        self.createdTime = self.modifiedTime = (
-            now.hour << 11 | now.minute << 5 | now.second / 2)
+        self.createdDate, self.createdTime = self.modifiedDate, self.modifiedTime = (
+            self.getDate(datetime.datetime.now()))
         self.clusters = None
 
     def initSector(self, sector):
@@ -562,21 +561,30 @@ class FileDescriptor:
         self.modifiedDate = ordw(sector[0x1A:0x1C])
         self.clusters = sector[0x1C:]
 
-    def initHeader(self, header):
+    def initHeader(self, header, hostfn):
         """create file based on TIFiles header"""
         if len(header) < 0x26 or header[:0x08] != "\x07TIFILES":
             raise FileError("Invalid TIFiles header")
-        self.name = header[0x10:0x1A].rstrip()
         self.flags = ord(header[0x0A]) & 0x83
         self.recordsPerSector = ord(header[0x0B])
         self.totalSectors = ordw(header[0x08:0x0A])
         self.eofOffset = ord(header[0x0C])
         self.recordLen = ord(header[0x0D])
         self.totalLv3Records = ordwR(header[0x0E:0x10])
-        self.createdTime = ordw(header[0x1E:0x20])
-        self.createdDate = ordw(header[0x20:0x22])
-        self.modifiedTime = ordw(header[0x22:0x24])
-        self.modifiedDate = ordw(header[0x24:0x26])
+        if header[0x10] == "\x00":
+            # short TIFiles: use file properties
+            self.name = tiname(hostfn)
+            dt = datetime.datetime.fromtimestamp(os.path.getctime(hostfn))
+            self.createdDate, self.createdTime = self.getDate(dt)
+            dt = datetime.datetime.fromtimestamp(os.path.getmtime(hostfn))
+            self.modifiedDate, self.modifiedTime = self.getDate(dt)
+        else:
+            # long TIFiles: use header data
+            self.name = header[0x10:0x1A].rstrip()
+            self.createdTime = ordw(header[0x1E:0x20])
+            self.createdDate = ordw(header[0x20:0x22])
+            self.modifiedTime = ordw(header[0x22:0x24])
+            self.modifiedDate = ordw(header[0x24:0x26])
         self.clusters = None
 
     def initDate(self, date, time):
@@ -589,6 +597,12 @@ class FileDescriptor:
         except ValueError:
             return None
 
+    def getDate(self, dt):
+        """convert datetime object into FDR date and time word"""
+        date = (dt.year % 100) << 9 | dt.month << 5 | dt.day
+        time = dt.hour << 11 | dt.minute << 5 | dt.second / 2
+        return date, time
+    
     def getSector(self):
         """return FDR as disk image sector"""
         return "%-10s\x00\x00%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c" % (
@@ -643,7 +657,7 @@ class File:
     """main file object with FDR metadata and sector contents"""
 
     def __init__(self, fd=None, name=None, fmt=None,
-                 tifimage=None, v9t9image=None, data=""):
+                 tifimage=None, v9t9image=None, data="", hostfn=""):
         self.warnings = []
         if fd:
             self.fd = fd
@@ -652,7 +666,7 @@ class File:
         elif tifimage:
             if not File.isTifiles(tifimage):
                 raise FileError("Invalid TIFiles image")
-            self.fd = FileDescriptor(header=tifimage[:0x80])
+            self.fd = FileDescriptor(header=tifimage[:0x80], hostfn=hostfn)
             self.data = (tifimage[0x80:] + "\x00" * pad(len(tifimage) - 0x80,
                                                         Disk.bytesPerSector))
             self.readRecords()
@@ -717,7 +731,7 @@ class File:
                         r, len(record) - self.fd.recordLen))
                     record = record[:self.fd.recordLen]
                 if p + 1 + len(record) + 1 > Disk.bytesPerSector and p > 0:
-                    data += "\xFF" + "\x00" * (Disk.bytesPerSector - p - 1)
+                    data += "\xff" + "\x00" * (Disk.bytesPerSector - p - 1)
                     s, p = s + 1, 0
                 data += chr(len(record)) + record
                 r += 1
@@ -829,7 +843,7 @@ def dump(s):
     return result
 
 
-def imageCmds(opts):
+def imageCmds(opts, extdata=None):
     """disk image manipulation"""
     rc, result = 0, []
     fmt = opts.format.upper() if opts.format else "PROGRAM"
@@ -839,9 +853,9 @@ def imageCmds(opts):
     if opts.init:
         barename = os.path.splitext(os.path.basename(opts.filename))[0]
         image = Disk.blankImage(opts.init, opts.name or barename[:10].upper())
-        result = [(image, opts.filename, "wb")]
+        result = (image, opts.filename, "wb")
     else:
-        image = readdata(opts.filename, "rb")
+        image = extdata or readdata(opts.filename, "rb")
     disk = Disk(image)
 
     # apply command to image
@@ -857,15 +871,18 @@ def imageCmds(opts):
                 "Error: Cannot use -o when extracting multiple files")
         if opts.astifiles:
             result = [(disk.getTifilesFile(name),
-                       re.sub('[^\w\-_\. ]', '_', name.lower()) + ".tfi", "wb")
+                       name.upper() if opts.tinames else name.lower() + ".tfi",
+                       "wb")
                       for name in files]
         elif opts.asv9t9:
             result = [(disk.getV9t9File(name),
-                       name.lower() + ".v9t9", "wb")
+                       name.upper() if opts.tinames else name.lower() + ".v9t9",
+                       "wb")
                       for name in files]
         else:
             fns = [(name, disk.getFile(name)) for name in files]
-            result = [(f.getContents(), n.lower(),
+            result = [(f.getContents(),
+                       n.upper() if opts.tinames else n.lower(),
                        "w" if f.fd.type == "D" and not f.fd.fixed else "wb")
                       for n, f in fns]
     elif opts.add:
@@ -876,7 +893,7 @@ def imageCmds(opts):
             if name == "-":
                 name = "STDIN"
             if opts.astifiles:
-                disk.addFile(File(tifimage=data))
+                disk.addFile(File(tifimage=data, hostfn=name))
             elif opts.asv9t9:
                 disk.addFile(File(v9t9image=data))
             else:
@@ -885,35 +902,35 @@ def imageCmds(opts):
                 if f.warnings and not opts.quiet:
                     sys.stderr.write(f.getWarnings())
                 disk.addFile(f)
-        result = [(disk.getImage(), opts.filename, "wb")]
+        result = (disk.getImage(), opts.filename, "wb")
     elif opts.rename:
         names = [arg.split(":") for arg in opts.rename]
         disk.renameFiles(names)
-        result = [(disk.getImage(), opts.filename, "wb")]
+        result = (disk.getImage(), opts.filename, "wb")
     elif opts.delete:
         files = disk.globFiles(opts.delete)
         for name in files:
             disk.removeFile(name)
-        result = [(disk.getImage(), opts.filename, "wb")]
+        result = (disk.getImage(), opts.filename, "wb")
     elif opts.resize:
         size, layout = Disk.parseGeometry(opts.resize)
         disk.resizeDisk(size)
         if layout:
             sides, density, tracks = layout
             disk.setGeometry(sides, density, tracks or Disk.defaultTracks)
-        result = [(disk.getImage(), opts.filename, "wb")]
+        result = (disk.getImage(), opts.filename, "wb")
     elif opts.geometry:
         size, layout = Disk.parseGeometry(opts.geometry)
         try:
             disk.setGeometry(*layout)
         except TypeError:
             raise DiskError("Invalid disk geometry " + opts.geometry)
-        result = [(disk.getImage(), opts.filename, "wb")]
+        result = (disk.getImage(), opts.filename, "wb")
     elif opts.checkonly:
         rc = 1 if disk.warnings else 0
     elif opts.repair:
         disk.fixDisk()
-        result = [(disk.getImage(), opts.filename, "wb")]
+        result = (disk.getImage(), opts.filename, "wb")
     elif opts.sector:
         opts.quiet = True
         try:
@@ -953,7 +970,7 @@ def fiadCmds(opts):
         else:
             istif = opts.astifiles or (
                 not opts.asv9t9 and File.isTifiles(image))
-            f = File(tifimage=image) if istif else File(v9t9image=image)
+            f = File(tifimage=image, hostfn=fn) if istif else File(v9t9image=image)
             if opts.fromfiad:
                 result.append((f.getContents(),
                                os.path.splitext(fn)[0],
@@ -966,7 +983,7 @@ def fiadCmds(opts):
     return rc, result
 
 
-def main():
+def main(argv, extdata=None):
     import os
     import argparse
     import glob
@@ -988,6 +1005,8 @@ def main():
         "filename", nargs="?", type=str,
         help="disk image filename")
     cmd = args.add_mutually_exclusive_group()
+    # used argument identifiers: adefhinopqrtu CFIPRSTXZ 9
+    
     # disk image commands
     cmd.add_argument(
         "-i", "--info", action="store_true", dest="info",
@@ -1040,6 +1059,9 @@ def main():
         "-t", "--tifiles", action="store_true", dest="astifiles",
         help="use TIFiles file format for added/extracted files")
     args.add_argument(
+        "--ti-names", action="store_true", dest="tinames",
+        help="use TI filenames for etracted files")
+    args.add_argument(
         "-9", "--v9t9", action="store_true", dest="asv9t9",
         help="use v9t9 file format for added/extracted files")
     args.add_argument(
@@ -1058,7 +1080,7 @@ def main():
     args.add_argument(
         "-q", "--quiet", action="store_true", dest="quiet",
         help="suppress all warnings")
-    opts = args.parse_args()
+    opts = args.parse_args(argv)
 
     # process image
     try:
@@ -1068,11 +1090,17 @@ def main():
             args.print_usage(sys.stderr)
             sys.exit("Error: Missing disk image")
         else:
-            rc, result = imageCmds(opts)
+            rc, result = imageCmds(opts, extdata)
     except (IOError, DiskError, FileError) as e:
         sys.exit("Error: " + str(e))
 
+    # process result
+    if extdata:
+        return result
+
     # write result
+    if isinstance(result, tuple):  # main file manipulation
+        result = [result]
     for data, name, mode in result:
         outname = opts.output or name
         try:
@@ -1084,5 +1112,5 @@ def main():
     return rc
 
 if __name__ == "__main__":
-    status = main()
+    status = main(sys.argv[1:])
     sys.exit(status)
