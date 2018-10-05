@@ -100,9 +100,9 @@ LOOP1  MOV  R8,R1
 *      Set coinc position
        MOV  R6,R1
        SWPB R1
-       BL   @SETCNC                    ; Set 5th sprite position
+       BL   @SETCNC                    ; Set coinc sprite point
 *      Wait coinc flag
-       BL   @WTCNC                     ; Wait 5th sprite flag
+       BL   @WTCNC                     ; Wait coinc flag
 *      Next position
        AI   R8,8
        AI   R6,8
